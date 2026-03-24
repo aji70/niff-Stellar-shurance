@@ -2,14 +2,13 @@
 
 mod claim;
 mod policy;
-#[allow(dead_code)] // used by policy.rs once feat/policy-lifecycle lands
 mod premium;
-mod storage;
+pub mod storage;
 mod token;
 pub mod types;
 pub mod validate;
 
-use soroban_sdk::{contract, contractimpl, Address, Env};
+use soroban_sdk::{contract, contractimpl, Address, Env, String, Vec};
 
 #[contract]
 pub struct NiffyInsure;
@@ -54,30 +53,58 @@ impl NiffyInsure {
         policy::map_quote_error(&env, err)
     }
 
-    /// Read-only helper for monitoring state in tests / ops tooling.
+    /// File a claim against an active policy.
+    /// Caller must be the policyholder; policy must be active and not expired.
+    /// Returns the new claim_id.
+    pub fn file_claim(
+        env: Env,
+        holder: Address,
+        policy_id: u32,
+        amount: i128,
+        details: String,
+        image_urls: Vec<String>,
+    ) -> Result<u64, claim::ClaimError> {
+        claim::file_claim(&env, holder, policy_id, amount, details, image_urls)
+    }
+
+    /// Cast a vote (Approve/Reject) on an open claim.
+    /// Voter must hold an active policy. Returns the updated ClaimStatus.
+    pub fn vote_on_claim(
+        env: Env,
+        voter: Address,
+        claim_id: u64,
+        vote: types::VoteOption,
+    ) -> Result<types::ClaimStatus, claim::ClaimError> {
+        claim::vote_on_claim(&env, voter, claim_id, vote)
+    }
+
+    // ── Read-only helpers for monitoring / tests / ops tooling ───────────
+
     pub fn get_claim_counter(env: Env) -> u64 {
         storage::get_claim_counter(&env)
     }
 
-    /// Read-only helper for monitoring state in tests / ops tooling.
     pub fn get_policy_counter(env: Env, holder: Address) -> u32 {
         storage::get_policy_counter(&env, &holder)
     }
 
-    /// Read-only helper for monitoring state in tests / ops tooling.
     pub fn has_policy(env: Env, holder: Address, policy_id: u32) -> bool {
         storage::has_policy(&env, &holder, policy_id)
     }
 
+    pub fn is_paused(env: Env) -> bool {
+        storage::is_paused(&env)
+    }
+
+    pub fn get_voters(env: Env) -> Vec<Address> {
+        storage::get_voters(&env)
+    }
+
     // ── Policy domain ────────────────────────────────────────────────────
-    // generate_premium, initiate_policy, renew_policy, terminate_policy
+    // initiate_policy, renew_policy, terminate_policy
     // implemented in policy.rs — issue: feat/policy-lifecycle
 
-    // ── Claim domain ─────────────────────────────────────────────────────
-    // file_claim, vote_on_claim
-    // implemented in claim.rs — issue: feat/claim-voting
-
     // ── Admin / treasury ─────────────────────────────────────────────────
-    // drain
+    // drain, set_paused
     // implemented in token.rs — issue: feat/admin
 }
