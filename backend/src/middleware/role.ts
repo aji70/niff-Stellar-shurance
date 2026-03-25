@@ -1,27 +1,8 @@
 import { Response, NextFunction, Request } from 'express';
-import { StaffRole, ROLE_PERMISSIONS } from '../types';
+import { StaffRole, ROLE_PERMISSIONS, AuthenticatedRequest } from '../types';
 
-export interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-    role: StaffRole;
-  };
-}
-
-/**
- * Required roles type - can be a single role or array of roles
- */
 export type RequiredRoles = StaffRole | StaffRole[];
-
-/**
- * Permission type
- */
 export type Permission = string;
-
-/**
- * Required permissions type - can be a single permission or array of permissions
- */
 export type RequiredPermissions = Permission | Permission[];
 
 /**

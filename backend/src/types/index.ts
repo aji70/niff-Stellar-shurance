@@ -1,3 +1,5 @@
+import { Request } from 'express';
+
 /**
  * Role types for staff authentication
  */
@@ -60,8 +62,8 @@ export interface RefreshResponse {
 /**
  * Authenticated request with user
  */
-export interface AuthenticatedRequest {
-  user: {
+export interface AuthenticatedRequest extends Request {
+  user?: {
     id: string;
     email: string;
     role: StaffRole;

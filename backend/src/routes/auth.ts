@@ -1,8 +1,9 @@
-import { Router, Response, NextFunction } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import userService from '../services/user';
 import jwtService from '../services/jwt';
 import config from '../config';
-import { LoginRequest, LoginResponse } from '../types';
+import { LoginRequest, LoginResponse, AuthenticatedRequest } from '../types';
+import { authenticate } from '../middleware/auth';
 
 const router = Router();
 
@@ -11,7 +12,7 @@ const router = Router();
  * Staff login endpoint
  * Body: { email: string, password: string }
  */
-router.post('/login', async (req: any, res: Response, next: NextFunction): Promise<void> => {
+router.post('/login', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { email, password } = req.body as LoginRequest;
 
@@ -71,7 +72,7 @@ router.post('/login', async (req: any, res: Response, next: NextFunction): Promi
  * Refresh access token using refresh token
  * Body: { refreshToken: string }
  */
-router.post('/refresh', async (req: any, res: Response, next: NextFunction): Promise<void> => {
+router.post('/refresh', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { refreshToken } = req.body;
 
@@ -84,7 +85,7 @@ router.post('/refresh', async (req: any, res: Response, next: NextFunction): Pro
       return;
     }
 
-    const result = jwtService.refreshAccessToken(refreshToken);
+    const result = await jwtService.refreshAccessToken(refreshToken, (id) => userService.findById(id));
 
     if (!result) {
       res.status(401).json({
@@ -106,39 +107,9 @@ router.post('/refresh', async (req: any, res: Response, next: NextFunction): Pro
  * Get current authenticated user info
  * Requires: Bearer token
  */
-router.get('/me', async (req: any, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const authHeader = req.headers.authorization;
-    
-    if (!authHeader) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Authorization required',
-        statusCode: 401,
-      });
-      return;
-    }
-
-    const parts = authHeader.split(' ');
-    if (parts.length !== 2 || parts[0] !== 'Bearer') {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Invalid authorization header',
-        statusCode: 401,
-      });
-      return;
-    }
-
-    const payload = jwtService.verifyAccessToken(parts[1]);
-
-    res.status(200).json({
-      id: payload.sub,
-      email: payload.email,
-      role: payload.role,
-    });
-  } catch (error) {
-    next(error);
-  }
+router.get('/me', authenticate, (req: Request, res: Response): void => {
+  const authReq = req as AuthenticatedRequest;
+  res.status(200).json(authReq.user);
 });
 
 /**

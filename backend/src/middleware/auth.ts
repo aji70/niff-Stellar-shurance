@@ -1,18 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwtService from '../services/jwt';
 import config from '../config';
-import { JwtPayload, StaffRole } from '../types';
-
-/**
- * Extended Request type with user property
- */
-export interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-    role: StaffRole;
-  };
-}
+import { AuthenticatedRequest } from '../types';
 
 /**
  * Authentication middleware

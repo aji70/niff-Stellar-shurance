@@ -85,20 +85,19 @@ export class JwtService {
   /**
    * Refresh access token using refresh token
    */
-  refreshAccessToken(refreshToken: string): { accessToken: string; expiresIn: number } | null {
+  refreshAccessToken(refreshToken: string, userLookup: (id: string) => Promise<{ id: string; email: string; role: StaffRole } | null>): Promise<{ accessToken: string; expiresIn: number } | null> {
     try {
       const payload = this.verifyRefreshToken(refreshToken);
-      
-      if (payload.type !== 'refresh') {
-        return null;
-      }
-
-      // In production, you would fetch the user from database
-      // For now, we'll just return null if we can't find the user
-      // This is a simplified implementation
-      return null;
+      if (payload.type !== 'refresh') return Promise.resolve(null);
+      return userLookup(payload.sub).then(user => {
+        if (!user) return null;
+        return {
+          accessToken: this.generateAccessToken(user),
+          expiresIn: config.security.tokenExpiryHours * 3600,
+        };
+      });
     } catch {
-      return null;
+      return Promise.resolve(null);
     }
   }
 

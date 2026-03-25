@@ -98,12 +98,17 @@ export class UserService {
     const adminExists = Array.from(users.values()).some(u => u.role === 'admin');
     
     if (!adminExists) {
-      // Default admin credentials: admin@niffyinsure.com / Admin@123
-      await this.createUser('admin@niffyinsure.com', 'Admin@123', 'admin');
-      
-      // Default support user: support@niffyinsure.com / Support@123
-      await this.createUser('support@niffyinsure.com', 'Support@123', 'support_readonly');
-      
+      const adminEmail = process.env.DEFAULT_ADMIN_EMAIL || 'admin@niffyinsure.com';
+      const adminPassword = process.env.DEFAULT_ADMIN_PASSWORD;
+      const supportEmail = process.env.DEFAULT_SUPPORT_EMAIL || 'support@niffyinsure.com';
+      const supportPassword = process.env.DEFAULT_SUPPORT_PASSWORD;
+
+      if (!adminPassword || !supportPassword) {
+        throw new Error('DEFAULT_ADMIN_PASSWORD and DEFAULT_SUPPORT_PASSWORD env vars are required');
+      }
+
+      await this.createUser(adminEmail, adminPassword, 'admin');
+      await this.createUser(supportEmail, supportPassword, 'support_readonly');
       console.log('Default staff users created');
     }
   }
