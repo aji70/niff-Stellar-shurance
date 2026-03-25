@@ -1,3 +1,108 @@
+
+#![no_std]
+
+mod claim;
+mod policy;
+#[allow(dead_code)] // used by policy.rs once feat/policy-lifecycle lands
+mod premium;
+mod storage;
+mod token;
+pub mod types;
+pub mod validate;
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ORACLE / PARAMETRIC TRIGGER MODULE (experimental only)
+//
+// ⚠️  LEGAL / COMPLIANCE REVIEW GATE: This module is compiled ONLY when the
+// `experimental` feature flag is enabled.  Default production builds cannot
+// process oracle triggers.
+//
+// Required before activation (see DESIGN-ORACLE.md):
+//   ✓ Complete cryptographic design review (signature schemes, replay protection)
+//   ✓ Game-theoretic analysis (oracle incentivization, sybil resistance)
+//   ✓ Legal & compliance review (regulatory classification of parametric triggers)
+//   ✓ Security audit by qualified Soroban smart contract auditors
+//
+// Do NOT enable in production without completing all required reviews.
+// ═════════════════════════════════════════════════════════════════════════════
+#[cfg(feature = "experimental")]
+mod oracle;
+
+#[cfg(feature = "experimental")]
+pub use oracle::*;
+
+use soroban_sdk::{contract, contractimpl, Address, Env};
+
+#[contract]
+pub struct NiffyInsure;
+
+#[contractimpl]
+impl NiffyInsure {
+    /// One-time initialisation: store admin and token contract address.
+    /// Must be called immediately after deployment.
+    pub fn initialize(env: Env, admin: Address, token: Address) {
+        storage::set_admin(&env, &admin);
+        storage::set_token(&env, &token);
+    }
+
+    /// Pure quote path: reads config and computes premium only.
+    /// This entrypoint intentionally performs no persistent writes.
+    pub fn generate_premium(
+        env: Env,
+        policy_type: types::PolicyType,
+        region: types::RegionTier,
+        age: u32,
+        risk_score: u32,
+        include_breakdown: bool,
+    ) -> Result<types::PremiumQuote, policy::QuoteError> {
+        policy::generate_premium(
+            &env,
+            policy_type,
+            region,
+            age,
+            risk_score,
+            include_breakdown,
+        )
+    }
+
+    /// Converts quote failure codes to support-friendly messages for API layers.
+    pub fn quote_error_message(env: Env, code: u32) -> policy::QuoteFailure {
+        let err = match code {
+            1 => policy::QuoteError::InvalidAge,
+            2 => policy::QuoteError::InvalidRiskScore,
+            3 => policy::QuoteError::InvalidQuoteTtl,
+            _ => policy::QuoteError::ArithmeticOverflow,
+        };
+        policy::map_quote_error(&env, err)
+    }
+
+    /// Read-only helper for monitoring state in tests / ops tooling.
+    pub fn get_claim_counter(env: Env) -> u64 {
+        storage::get_claim_counter(&env)
+    }
+
+    /// Read-only helper for monitoring state in tests / ops tooling.
+    pub fn get_policy_counter(env: Env, holder: Address) -> u32 {
+        storage::get_policy_counter(&env, &holder)
+    }
+
+    /// Read-only helper for monitoring state in tests / ops tooling.
+    pub fn has_policy(env: Env, holder: Address, policy_id: u32) -> bool {
+        storage::has_policy(&env, &holder, policy_id)
+    }
+
+    // ── Policy domain ────────────────────────────────────────────────────
+    // generate_premium, initiate_policy, renew_policy, terminate_policy
+    // implemented in policy.rs — issue: feat/policy-lifecycle
+
+    // ── Claim domain ─────────────────────────────────────────────────────
+    // file_claim, vote_on_claim
+    // implemented in claim.rs — issue: feat/claim-voting
+
+    // ── Admin / treasury ─────────────────────────────────────────────────
+    // drain
+    // implemented in token.rs — issue: feat/admin
+}
 #![no_std]
 
 mod claim;
@@ -110,8 +215,8 @@ impl NiffyInsure {
         claim::get_claim(&env, claim_id)
     }
 
-pub fn get_claim_counter(env: Env) -> u64 {
-        storage::next_claim_id(&env) - 1  // last issued
+    pub fn get_claim_counter(env: Env) -> u64 {
+        storage::get_claim_counter(&env)
     }
 
     pub fn get_policy_counter(env: Env, holder: Address) -> u32 {
@@ -122,7 +227,9 @@ pub fn get_claim_counter(env: Env) -> u64 {
         storage::has_policy(&env, &holder, policy_id)
     }
 
-// Keep only one is_paused
+    pub fn is_paused(env: Env) -> bool {
+        storage::is_paused(&env)
+    }
 
     pub fn get_voters(env: Env) -> Vec<Address> {
         storage::get_voters(&env)
@@ -155,24 +262,6 @@ pub fn get_claim_counter(env: Env) -> u64 {
     /// Read-only: number of active policies for a holder (= vote weight).
     pub fn get_active_policy_count(env: Env, holder: Address) -> u32 {
         storage::get_active_policy_count(&env, &holder)
-    }
-
-    /// File a new claim against an active policy. Authenticates claimant as policyholder.
-    /// Validates coverage bounds (incl 10% deductible), evidence limits, no concurrent open claim.
-    /// Increments global claim_id, persists Claim{status=Processing, snapshot_voters}, emits ClaimFiled.
-    pub fn file_claim(
-        env: Env,
-        holder: Address,
-        policy_id: u32,
-        amount: i128,
-        evidence: Vec<String>,
-        details_hash: String,
-    ) -> Result<u64, validate::Error> {
-        holder.require_auth();
-        if storage::is_paused(&env) {
-            panic!("contract paused");
-        }
-        claim::file_claim(&env, holder, policy_id, amount, evidence, details_hash)
     }
 
     // ── Admin / pause ────────────────────────────────────────────────────
@@ -243,4 +332,4 @@ pub fn get_claim_counter(env: Env) -> u64 {
 }
 
 // Re-export error type so tests can reference it without the module path.
-// pub use claim::ContractError;  // Removed: use validate::Error directly
+pub use claim::ContractError;
