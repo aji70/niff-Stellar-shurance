@@ -1,15 +1,14 @@
-# Fix #31: Pure premium math refactor
+# Issue #13: finalize_claim implementation
 
-Current branch: blackboxai/fix-31-pure-premium
+Current branch: blackboxai/issue-13-finalize-claim
 
 ## Steps:
-- [ ] 1. Update Cargo.toml: Add serde_json, csv to [dev-dependencies]
-- [ ] 2. Create src/premium_pure.rs: Pure functions/structs
-- [ ] 3. Refactor src/policy.rs: Use pure functions
-- [ ] 4. Deprecate/update src/premium.rs
-- [ ] 5. Create tests/premium_table_tests.rs: JSON-driven golden vectors + docs
-- [ ] 6. Update tests/quote.rs: Test pure paths
-- [ ] 7. cargo check
-- [ ] 8. Commit changes
+- [x] 1. git checkout -b blackboxai/issue-13-finalize-claim
+- [x] 2. Update src/types.rs: Add voting_deadline_ledger: u32 to Claim struct
+- [x] 3. Update src/storage.rs: Add helpers get_claim, put_claim, get_votes_count(claim_id)->u32, has_vote(claim_id, voter), record_vote(claim_id, voter, VoteOption), get_voters_len() -> u32
+- [ ] 4. Implement src/claim.rs: file_claim(... vote_duration_ledgers: u32), vote_on_claim(claim_id, vote), finalize_claim(claim_id)
+- [ ] 5. Update src/lib.rs: Add the 3 public entrypoints forwarding to claim::
+- [ ] 6. cargo check + verify
+- [ ] 7. git commit -am 'feat: implement finalize_claim with deadlines/quorum/terminal guards'
 
-No tests run per instructions.
+No tests per instructions.

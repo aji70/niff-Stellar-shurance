@@ -1,4 +1,5 @@
-use soroban_sdk::{contracttype, Address, Env};
+use soroban_sdk::{contracttype, Address, Env, Vec};
+use crate::types::{Claim, VoteOption};
 
 #[contracttype]
 pub enum DataKey {
@@ -75,8 +76,43 @@ pub fn get_policy_counter(env: &Env, holder: &Address) -> u32 {
         .unwrap_or(0u32)
 }
 
+
 pub fn has_policy(env: &Env, holder: &Address, policy_id: u32) -> bool {
     env.storage()
         .persistent()
         .has(&DataKey::Policy(holder.clone(), policy_id))
 }
+
+pub fn get_claim(env: &Env, claim_id: &u64) -> Claim {
+    env.storage().instance().get(&DataKey::Claim(*claim_id)).unwrap()
+}
+
+pub fn put_claim(env: &Env, claim_id: &u64, claim: &Claim) {
+    env.storage().instance().set(&DataKey::Claim(*claim_id), claim);
+}
+
+pub fn has_vote(env: &Env, claim_id: &u64, voter: &Address) -> bool {
+    env.storage().instance().has(&DataKey::Vote(*claim_id, voter.clone()))
+}
+
+pub fn record_vote(env: &Env, claim_id: &u64, voter: &Address, vote: &VoteOption) {
+    env.storage().instance().set(&DataKey::Vote(*claim_id, voter.clone()), vote);
+}
+
+pub fn get_votes_count(_env: &Env, _claim_id: &u64) -> u32 {
+    0 // stub, extend with counter later
+}
+
+pub fn get_voters(env: &Env) -> Vec<Address> {
+    env.storage().instance().get(&DataKey::Voters).unwrap_or_else(|| Vec::new(env))
+}
+
+pub fn get_voters_len(env: &Env) -> u32 {
+    get_voters(env).len() as u32
+}
+
+#[allow(dead_code)]
+pub fn set_voters(env: &Env, voters: &Vec<Address>) {
+    env.storage().instance().set(&DataKey::Voters, voters);
+}
+

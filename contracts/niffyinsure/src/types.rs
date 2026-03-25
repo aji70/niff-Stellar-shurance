@@ -147,6 +147,7 @@ pub struct Claim {
     /// IPFS URLs for supporting images; max IMAGE_URLS_MAX items.
     pub image_urls: Vec<String>,
     pub status: ClaimStatus,
+    pub voting_deadline_ledger: u32,
     pub approve_votes: u32,
     pub reject_votes: u32,
 }
