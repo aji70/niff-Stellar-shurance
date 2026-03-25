@@ -1,9 +1,11 @@
+use crate::types::MultiplierTable;
 use soroban_sdk::{contracttype, Address, Env};
 
 #[contracttype]
 pub enum DataKey {
     Admin,
     Token,
+    PremiumTable,
     /// (holder, policy_id) — policy_id is per-holder u32
     Policy(Address, u32),
     /// Per-holder policy counter; next policy_id = counter + 1
@@ -21,7 +23,6 @@ pub fn set_admin(env: &Env, admin: &Address) {
     env.storage().instance().set(&DataKey::Admin, admin);
 }
 
-/// Used by initialize and admin drain (feat/admin).
 #[allow(dead_code)]
 pub fn get_admin(env: &Env) -> Address {
     env.storage().instance().get(&DataKey::Admin).unwrap()
@@ -31,14 +32,19 @@ pub fn set_token(env: &Env, token: &Address) {
     env.storage().instance().set(&DataKey::Token, token);
 }
 
-/// Used by claim payout (feat/claim-voting).
 #[allow(dead_code)]
 pub fn get_token(env: &Env) -> Address {
     env.storage().instance().get(&DataKey::Token).unwrap()
 }
 
-/// Returns the next policy_id for `holder` and increments the counter.
-/// Used by feat/policy-lifecycle.
+pub fn set_multiplier_table(env: &Env, table: &MultiplierTable) {
+    env.storage().instance().set(&DataKey::PremiumTable, table);
+}
+
+pub fn get_multiplier_table(env: &Env) -> MultiplierTable {
+    env.storage().instance().get(&DataKey::PremiumTable).unwrap()
+}
+
 #[allow(dead_code)]
 pub fn next_policy_id(env: &Env, holder: &Address) -> u32 {
     let key = DataKey::PolicyCounter(holder.clone());
@@ -47,8 +53,6 @@ pub fn next_policy_id(env: &Env, holder: &Address) -> u32 {
     next
 }
 
-/// Returns the next global claim_id and increments the counter.
-/// Used by feat/claim-voting.
 #[allow(dead_code)]
 pub fn next_claim_id(env: &Env) -> u64 {
     let next: u64 = env
