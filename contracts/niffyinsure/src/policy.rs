@@ -1,17 +1,15 @@
 use crate::{
+    calculator,
+    ledger,
     premium,
     storage,
     token,
     types::{AgeBand, CoverageType, Policy, PolicyType, PremiumQuote, RegionTier, RiskInput},
-    validate,
+    validate::{self, Error},
 };
 use soroban_sdk::{contractevent, contracterror, contracttype, symbol_short, Address, Env, String};
 
-/// How long a quote stays valid (in ledgers) from generation time.
-pub const QUOTE_TTL_LEDGERS: u32 = 100;
-
-/// Default policy duration in ledgers (~30 days at 5s/ledger ≈ 518_400).
-pub const POLICY_DURATION_LEDGERS: u32 = 518_400;
+pub use ledger::QUOTE_TTL_LEDGERS;
 
 /// Current event schema version.
 pub const POLICY_EVENT_VERSION: u32 = 1;
@@ -116,6 +114,58 @@ pub fn generate_premium(
     })
 }
 
+pub fn map_quote_error(env: &Env, err: Error) -> QuoteFailure {
+    let message = match err {
+        Error::InvalidBaseAmount => "invalid base amount: expected > 0",
+        Error::SafetyScoreOutOfRange => "invalid safety_score: expected 0..=100",
+        Error::InvalidConfigVersion => "invalid premium table version: expected a strictly newer version",
+        Error::MissingRegionMultiplier => "premium table missing one or more region multipliers",
+        Error::MissingAgeMultiplier => "premium table missing one or more age-band multipliers",
+        Error::MissingCoverageMultiplier => "premium table missing one or more coverage multipliers",
+        Error::RegionMultiplierOutOfBounds => "region multiplier out of bounds: expected 0.5000x..=5.0000x",
+        Error::AgeMultiplierOutOfBounds => "age-band multiplier out of bounds: expected 0.5000x..=5.0000x",
+        Error::CoverageMultiplierOutOfBounds => {
+            "coverage multiplier out of bounds: expected 0.5000x..=5.0000x"
+        }
+        Error::SafetyDiscountOutOfBounds => {
+            "safety discount out of bounds: expected 0.0000x..=0.5000x"
+        }
+        Error::Overflow => "pricing arithmetic overflow: reduce base amount or multiplier values",
+        Error::DivideByZero => "pricing divide by zero: check configured scaling factors",
+        Error::InvalidQuoteTtl => "quote ttl misconfigured: contact support",
+        Error::NegativePremiumNotSupported => "negative premium inputs are not supported",
+        Error::ClaimNotFound => "claim not found",
+        Error::InvalidAsset => "claim asset is not allowlisted for payout",
+        Error::InsufficientTreasury => "treasury balance is insufficient for the approved payout",
+        Error::AlreadyPaid => "claim payout already executed",
+        Error::ClaimNotApproved => "claim must be approved before payout",
+        Error::ZeroCoverage => "policy coverage must be greater than zero",
+        Error::ZeroPremium => "policy premium must be greater than zero",
+        Error::InvalidLedgerWindow => "invalid ledger window: end_ledger must be greater than start_ledger",
+        Error::PolicyExpired => "policy is expired",
+        Error::PolicyInactive => "policy is inactive",
+        Error::ClaimAmountZero => "claim amount must be greater than zero",
+        Error::ClaimExceedsCoverage => "claim amount exceeds policy coverage",
+        Error::DetailsTooLong => "claim details exceed maximum length",
+        Error::TooManyImageUrls => "too many image URLs supplied",
+        Error::ImageUrlTooLong => "image URL exceeds maximum length",
+        Error::ReasonTooLong => "termination reason exceeds maximum length",
+        Error::ClaimAlreadyTerminal => "claim already reached a terminal status",
+        Error::DuplicateVote => "duplicate vote detected",
+        Error::CalculatorNotSet => "no external calculator configured",
+        Error::CalculatorCallFailed => "cross-contract call to premium calculator failed",
+        Error::CalculatorPaused => "premium calculator is paused; policy bind rejected",
+        Error::VotingWindowClosed => "voting window has closed; use finalize_claim",
+        Error::VotingWindowStillOpen => "voting window is still open; cannot finalize yet",
+        Error::NotEligibleVoter => "caller is not in the claim voter snapshot",
+        Error::RateLimitExceeded => "claim rate-limit: wait before filing another claim",
+    };
+    QuoteFailure {
+        code: err as u32,
+        message: String::from_str(env, message),
+    }
+}
+
 /// Turns an accepted quote into an enforceable on-chain policy.
 pub fn initiate_policy(
     env: &Env,
@@ -147,11 +197,22 @@ pub fn initiate_policy(
         return Err(PolicyError::InvalidCoverage);
     }
 
-    let table = storage::get_multiplier_table(env);
-    let computation = premium::compute_premium(&input, base_amount, &table)
-        .map_err(|_| PolicyError::PremiumOverflow)?;
-    
-    let premium_amount = computation.total_premium;
+    // 4. Compute premium via the calculator (external or local fallback).
+    //    Map calculator errors to PolicyError so callers get a typed failure.
+    let risk_input = crate::types::RiskInput {
+        region: region.clone(),
+        age_band: age_to_band(age),
+        coverage: risk_score_to_coverage(risk_score),
+        safety_score: 0,
+    };
+    let base_amount = coverage / 10; // 10% of coverage as base
+    let quote = crate::calculator::compute_quote(env, &risk_input, base_amount, false, QUOTE_TTL_LEDGERS)
+        .map_err(|e| match e {
+            validate::Error::CalculatorPaused => PolicyError::ContractPaused,
+            validate::Error::CalculatorCallFailed | validate::Error::CalculatorNotSet => PolicyError::PremiumOverflow,
+            _ => PolicyError::PremiumOverflow,
+        })?;
+    let premium_amount = quote.total_premium;
     if premium_amount <= 0 {
         return Err(PolicyError::InvalidPremium);
     }
@@ -165,7 +226,7 @@ pub fn initiate_policy(
 
     let current_ledger = env.ledger().sequence();
     let end_ledger = current_ledger
-        .checked_add(POLICY_DURATION_LEDGERS)
+        .checked_add(ledger::POLICY_DURATION_LEDGERS)
         .ok_or(PolicyError::LedgerOverflow)?;
 
     let policy = Policy {
@@ -182,7 +243,10 @@ pub fn initiate_policy(
 
     validate::check_policy(&policy).map_err(|_| PolicyError::PolicyValidation)?;
 
-    storage::set_policy(env, &holder, policy_id, &policy);
+    // 8. Persist policy
+    storage::set_policy(env, &policy);
+
+    // 9. Update voter registry
     storage::add_voter(env, &holder);
 
     PolicyInitiated {
@@ -202,55 +266,22 @@ pub fn initiate_policy(
     Ok(policy)
 }
 
-/// Renews an existing policy by paying the premium for another period.
-pub fn renew_policy(
-    env: &Env,
-    holder: Address,
-    policy_id: u32,
-) -> Result<Policy, PolicyError> {
-    if storage::is_paused(env) {
-        return Err(PolicyError::ContractPaused);
-    }
-
-    holder.require_auth();
-
-    let mut policy = storage::get_policy(env, &holder, policy_id)
-        .ok_or(PolicyError::NotFound)?;
-
-    // Only active policies can be renewed (mvp constraint)
-    if !policy.is_active {
-        return Err(PolicyError::AlreadyActive);
-    }
-
-    // Premium transfer
-    token::collect_premium(env, &holder, policy.premium);
-
-    let current_ledger = env.ledger().sequence();
-    
-    // Extend from current end_ledger if not expired, otherwise from current_ledger
-    let start_point = if current_ledger < policy.end_ledger {
-        policy.end_ledger
+fn age_to_band(age: u32) -> crate::types::AgeBand {
+    if age < 30 {
+        crate::types::AgeBand::Young
+    } else if age < 60 {
+        crate::types::AgeBand::Adult
     } else {
-        current_ledger
-    };
+        crate::types::AgeBand::Senior
+    }
+}
 
-    let new_end_ledger = start_point
-        .checked_add(POLICY_DURATION_LEDGERS)
-        .ok_or(PolicyError::LedgerOverflow)?;
-
-    policy.end_ledger = new_end_ledger;
-
-    storage::set_policy(env, &holder, policy_id, &policy);
-
-    env.events().publish(
-        (symbol_short!("policy"), symbol_short!("renewed")),
-        PolicyRenewed {
-            holder: holder.clone(),
-            policy_id,
-            premium: policy.premium,
-            new_end_ledger,
-        },
-    );
-
-    Ok(policy)
+fn risk_score_to_coverage(risk_score: u32) -> crate::types::CoverageType {
+    if risk_score <= 3 {
+        crate::types::CoverageType::Basic
+    } else if risk_score <= 7 {
+        crate::types::CoverageType::Standard
+    } else {
+        crate::types::CoverageType::Premium
+    }
 }

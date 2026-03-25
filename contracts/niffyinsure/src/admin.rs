@@ -9,12 +9,12 @@
 ///
 /// Production deployments SHOULD use a Stellar multisig account as admin.
 /// See SECURITY.md for the full threat matrix and multisig setup guidance.
-use soroban_sdk::{contracttype, panic_with_error, symbol_short, Address, Env};
+use soroban_sdk::{contracterror, panic_with_error, symbol_short, Address, Env};
 
 use crate::storage;
 
-#[contracttype]
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[contracterror]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Ord, Eq)]
 #[repr(u32)]
 pub enum AdminError {
     /// Caller is not the current admin.
