@@ -57,6 +57,14 @@ Record the contract ID and the SHA-256 from `make sha` in your release notes so 
 | `stellar contract deploy` fails | Wrong CLI version | `stellar --version` must be ≥ 21 |
 | Tests fail with `no_std` errors | Running `cargo test --target wasm32` | Tests run on native; omit `--target` flag |
 
+## Quote behavior (`generate_premium`)
+
+- `generate_premium` is a quote-only entrypoint: it does not increment `claim_id`, mutate policy state, or transfer funds.
+- The response is a structured `PremiumQuote` with `total_premium`, optional `line_items` (for UX), and `valid_until_ledger`.
+- MVP does not emit quote events to reduce event spam, avoid accidental PII leakage, and stay within Soroban payload limits.
+- Validation failures return typed error codes; API layers can map these using `quote_error_message(code)` for support-friendly messages.
+- Off-chain quote caches must enforce `valid_until_ledger`: if admin-adjustable multipliers are introduced later, stale cached quotes must be discarded and re-simulated before bind.
+
 ## Module map
 
 ```
