@@ -1,9 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
-import { RedisService } from '../cache/redis.service';
-import { PrismaService } from '../prisma/prisma.service';
-import { SanitizationService } from './sanitization.service';
+import { SorobanService } from '../rpc/soroban.service';
 import {
   ClaimDetailResponseDto,
   ClaimMetadataDto,
@@ -42,6 +40,7 @@ export class ClaimsService {
     private readonly redis: RedisService,
     private readonly sanitization: SanitizationService,
     private readonly config: ConfigService,
+    private readonly soroban: SorobanService,
   ) {
     this.cacheTtl = this.config.get<number>('CACHE_TTL_SECONDS', 60);
     this.ipfsGateway = this.config.get<string>('IPFS_GATEWAY', 'https://ipfs.io');
@@ -285,5 +284,30 @@ export class ClaimsService {
     }
     await this.redis.delPattern('claims:list:*');
     this.logger.log(`Cache invalidated for claim ${claimId || 'all'}`);
+  }
+
+  /**
+   * Build an unsigned file_claim transaction
+   */
+  async buildTransaction(args: {
+    holder: string;
+    policyId: number;
+    amount: bigint;
+    details: string;
+    imageUrls: string[];
+  }) {
+    return this.soroban.buildFileClaimTransaction(args);
+  }
+
+  /**
+   * Submit a signed transaction
+   */
+  async submitTransaction(transactionXdr: string) {
+    const result = await this.soroban.submitTransaction(transactionXdr);
+    
+    // Invalidate claims list cache so the new claim appears
+    await this.invalidateCache();
+    
+    return result;
   }
 }
