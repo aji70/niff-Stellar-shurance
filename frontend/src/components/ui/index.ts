@@ -47,3 +47,4 @@ export {
 } from './card'
 export { Badge, badgeVariants } from './badge'
 export { Stepper, StepContent, type Step } from './stepper'
+export { Progress } from './progress'
