@@ -16,13 +16,13 @@ import {
   Account,
   BASE_FEE,
   Contract,
-  SorobanRpc,
   TransactionBuilder,
   nativeToScVal,
   scValToNative,
   xdr,
   Address,
 } from '@stellar/stellar-sdk';
+import { rpc as SorobanRpc } from '@stellar/stellar-sdk';
 
 const { Api, assembleTransaction } = SorobanRpc;
 

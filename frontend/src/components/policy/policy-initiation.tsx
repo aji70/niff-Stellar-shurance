@@ -1,15 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { PolicyInitiationSchema, PolicyInitiationData, Transaction, Policy } from '@/lib/schemas/policy'
 import { PolicyAPI, PolicyError, getPolicyErrorMessage, getExplorerUrl } from '@/lib/api/policy'
-import { QuoteAPI } from '@/lib/api/quote'
+import { QuoteAPI, QuoteError, getQuoteErrorMessage } from '@/lib/api/quote'
+import type { QuoteResponse } from '@/lib/schemas/quote'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Stepper, StepContent, type Step } from '@/components/ui/stepper'
@@ -21,9 +22,7 @@ import {
   Copy, 
   ExternalLink,
   Wallet,
-  FileText,
-  Shield,
-  Check
+  Shield
 } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
 
@@ -37,7 +36,7 @@ export function PolicyInitiation({ quoteId: propQuoteId }: PolicyInitiationProps
   const quoteId = propQuoteId || searchParams.get('quoteId') || ''
   
   const [currentStep, setCurrentStep] = useState(0)
-  const [quote, setQuote] = useState<any>(null)
+  const [quote, setQuote] = useState<QuoteResponse | null>(null)
   const [transaction, setTransaction] = useState<Transaction | null>(null)
   const [policy, setPolicy] = useState<Policy | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -48,20 +47,16 @@ export function PolicyInitiation({ quoteId: propQuoteId }: PolicyInitiationProps
   const {
     register,
     handleSubmit,
-    control,
     formState: { errors, isValid },
     setValue,
-    watch
   } = useForm<PolicyInitiationData>({
-    resolver: zodResolver(PolicyInitiationSchema) as any,
+    resolver: zodResolver(PolicyInitiationSchema),
     defaultValues: {
       quoteId,
       walletAddress: '',
       acceptTerms: false,
     }
   })
-
-  const acceptTerms = watch('acceptTerms')
 
   const steps: Step[] = [
     {
@@ -92,25 +87,25 @@ export function PolicyInitiation({ quoteId: propQuoteId }: PolicyInitiationProps
 
   useEffect(() => {
     if (quoteId) {
-      loadQuote()
-    }
-  }, [quoteId])
-
-  const loadQuote = async () => {
-    try {
-      const quoteData = await QuoteAPI.getQuoteById(quoteId)
-      setQuote(quoteData)
-      setCurrentStep(1)
-    } catch (error) {
-      if (error instanceof PolicyError) {
-        toast({
-          title: 'Quote Error',
-          description: getPolicyErrorMessage(error),
-          variant: 'destructive'
-        })
+      const loadQuote = async () => {
+        try {
+          const quoteData = await QuoteAPI.getQuoteById(quoteId)
+          setQuote(quoteData)
+          setCurrentStep(1)
+        } catch (error) {
+          if (error instanceof QuoteError) {
+            toast({
+              title: 'Quote Error',
+              description: getQuoteErrorMessage(error),
+              variant: 'destructive'
+            })
+          }
+        }
       }
+
+      void loadQuote()
     }
-  }
+  }, [quoteId, toast])
 
   const connectWallet = async () => {
     try {
@@ -125,7 +120,7 @@ export function PolicyInitiation({ quoteId: propQuoteId }: PolicyInitiationProps
         title: 'Wallet Connected',
         description: 'Your Stellar wallet has been connected successfully',
       })
-    } catch (error) {
+    } catch {
       toast({
         title: 'Connection Error',
         description: 'Failed to connect wallet. Please try again.',

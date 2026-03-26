@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { QuoteFormSchema, QuoteFormData, QuoteResponse } from '@/lib/schemas/quote'
@@ -30,10 +30,9 @@ export function QuoteForm({ onQuoteReceived }: QuoteFormProps) {
     handleSubmit,
     control,
     watch,
-    setValue,
     formState: { errors, isValid, isDirty }
   } = useForm<QuoteFormData>({
-    resolver: zodResolver(QuoteFormSchema) as any,
+    resolver: zodResolver(QuoteFormSchema),
     mode: 'onChange',
     defaultValues: {
       coverageAmount: 1000,
@@ -46,42 +45,36 @@ export function QuoteForm({ onQuoteReceived }: QuoteFormProps) {
 
   const watchedValues = watch()
 
-  // Debounced quote calculation
-  const debouncedCalculation = useCallback(
-    debounce(async (data: Partial<QuoteFormData>) => {
-      if (!isValid || !isDirty) return
-      
+  // Watch for form changes and trigger debounced calculation
+  useEffect(() => {
+    if (!isValid || !isDirty) {
+      setIsCalculating(false)
+      return
+    }
+
+    const timeout = setTimeout(async () => {
       try {
         setIsCalculating(true)
-        const quote = await QuoteAPI.getQuote(data as QuoteFormData)
+        const quote = await QuoteAPI.getQuote(watchedValues)
         setCurrentQuote(quote)
       } catch (error) {
-        if (error instanceof QuoteError) {
-          // Don't show toast for validation errors during typing
-          if (error.code !== 'VALIDATION_ERROR') {
-            toast({
-              title: 'Calculation Error',
-              description: getQuoteErrorMessage(error),
-              variant: 'destructive'
-            })
-          }
+        if (error instanceof QuoteError && error.code !== 'VALIDATION_ERROR') {
+          toast({
+            title: 'Calculation Error',
+            description: getQuoteErrorMessage(error),
+            variant: 'destructive'
+          })
         }
         setCurrentQuote(null)
       } finally {
         setIsCalculating(false)
       }
-    }, 800),
-    [isValid, isDirty, toast]
-  )
+    }, 800)
 
-  // Watch for form changes and trigger debounced calculation
-  useEffect(() => {
-    if (isValid && isDirty) {
-      debouncedCalculation(watchedValues)
-    }
-  }, [watchedValues, isValid, isDirty, debouncedCalculation])
+    return () => clearTimeout(timeout)
+  }, [watchedValues, isValid, isDirty, toast])
 
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: QuoteFormData) => {
     try {
       setIsSubmitting(true)
       const quote = await QuoteAPI.getQuote(data)
@@ -355,16 +348,4 @@ export function QuoteForm({ onQuoteReceived }: QuoteFormProps) {
       </Card>
     </div>
   )
-}
-
-// Simple debounce function
-function debounce<T extends (...args: any[]) => any>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout
-  return (...args: Parameters<T>) => {
-    clearTimeout(timeout)
-    timeout = setTimeout(() => func(...args), wait)
-  }
 }

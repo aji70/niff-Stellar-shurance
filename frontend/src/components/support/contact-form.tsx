@@ -18,6 +18,7 @@ const schema = z.object({
 });
 
 type FormData = z.infer<typeof schema>;
+const DEFAULT_ERROR_MESSAGE = 'Something went wrong. Please try again.';
 
 export function ContactForm() {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
@@ -39,8 +40,8 @@ export function ContactForm() {
       setStatus('success');
       reset();
       setCaptchaToken(null);
-    } catch (e: any) {
-      setErrorMsg(e.message || 'Something went wrong. Please try again.');
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : DEFAULT_ERROR_MESSAGE);
       setStatus('error');
     }
   };
@@ -49,7 +50,7 @@ export function ContactForm() {
     return (
       <div className="flex flex-col items-center gap-3 py-10 text-center">
         <CheckCircle className="h-10 w-10 text-green-500" />
-        <p className="font-medium">Message received. We'll get back to you shortly.</p>
+        <p className="font-medium">Message received. We&apos;ll get back to you shortly.</p>
         <Button variant="outline" size="sm" onClick={() => setStatus('idle')}>Send another</Button>
       </div>
     );
