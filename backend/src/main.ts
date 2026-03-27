@@ -5,7 +5,7 @@ import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import helmet from "helmet";
 import { ConfigService } from "@nestjs/config";
-import { LoggerMiddleware } from "./common/middleware/logger.middleware";
+import { RequestContextMiddleware } from "./common/middleware/request-context.middleware";
 import type { Request, Response, NextFunction } from "express";
 
 export function parseOrigins(raw: string): string[] {

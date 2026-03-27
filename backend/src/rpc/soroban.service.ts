@@ -480,16 +480,24 @@ export class SorobanService {
    * Expects base64-encoded XDR (envelope).
    */
   async submitTransaction(transactionXdr: string): Promise<SorobanRpc.Api.SendTransactionResponse> {
-    const server = this.makeServer();
-    const tx = TransactionBuilder.fromXDR(transactionXdr, this.networkPassphrase);
-    
-    try {
-      const response = await server.sendTransaction(tx);
-      if (response.status === 'ERROR') {
-        throw new BadRequestException({
-          code: 'TRANSACTION_REJECTED',
-          message: 'The transaction was rejected by the network.',
-          details: response.errorResult,
+    return this.trackRpc('send_transaction', async () => {
+      const server = this.makeServer();
+      const tx = TransactionBuilder.fromXDR(transactionXdr, this.networkPassphrase);
+      try {
+        const response = await server.sendTransaction(tx);
+        if (response.status === 'ERROR') {
+          throw new BadRequestException({
+            code: 'TRANSACTION_REJECTED',
+            message: 'The transaction was rejected by the network.',
+            details: response.errorResult,
+          });
+        }
+        return response;
+      } catch (err) {
+        this.logger.error('Transaction submission error', err);
+        throw new ServiceUnavailableException({
+          code: 'SUBMISSION_FAILED',
+          message: 'Failed to submit transaction to the network.',
         });
       }
     });
