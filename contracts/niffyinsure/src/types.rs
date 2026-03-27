@@ -298,6 +298,19 @@ pub struct Policy {
     pub strike_count: u32,
 }
 
+/// Return value of [`crate::policy::renew_policy`].
+///
+/// When the policy is already at or past `end_ledger`, the call **succeeds** with [`Lapsed`](Self::Lapsed)
+/// so that [`crate::policy::PolicyExpired`] and idempotency storage are committed (a failed `Result::Err`
+/// invocation would roll those writes back).
+#[contracttype]
+#[derive(Clone)]
+pub enum RenewPolicyOutcome {
+    Renewed(Policy),
+    /// Ledger is at or after `end_ledger`; expiry notice recorded if due; no premium taken.
+    Lapsed,
+}
+
 /// On-chain claim record.
 ///
 /// `filed_at` is the ledger sequence at which the claim was filed.  It anchors

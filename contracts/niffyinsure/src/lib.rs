@@ -26,6 +26,7 @@ use soroban_sdk::{contract, contractevent, contractimpl, Address, Env, Vec};
 #[contract]
 pub struct NiffyInsure;
 pub use admin::AdminError;
+pub use policy::PolicyError;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[soroban_sdk::contracterror]
@@ -366,6 +367,48 @@ impl NiffyInsure {
     /// Read-only: number of active policies for a holder (= vote weight).
     pub fn get_active_policy_count(env: Env, holder: Address) -> u32 {
         storage::get_active_policy_count(&env, &holder)
+    }
+
+    /// If set, the `end_ledger` for which a [`policy::PolicyExpired`] event was already recorded
+    /// (one row per policy). Indexers may use this with `get_policy` for idempotency checks.
+    /// Name is shortened to satisfy the 32-char Soroban export limit.
+    pub fn get_pol_exp_evt_end_ledger(
+        env: Env,
+        holder: Address,
+        policy_id: u32,
+    ) -> Option<u32> {
+        storage::get_policy_expired_event_end_ledger(&env, &holder, policy_id)
+    }
+
+    /// Keeper hook: when `ledger_sequence >= policy.end_ledger`, emit [`policy::PolicyExpired`]
+    /// once per policy term (see `policy` module docs for notification delay). Reverts if the
+    /// policy does not exist or is not yet expired.
+    pub fn process_expired(
+        env: Env,
+        holder: Address,
+        policy_id: u32,
+    ) -> Result<(), policy::PolicyError> {
+        policy::process_expired(&env, holder, policy_id)
+    }
+
+    /// Renew before `end_ledger` (renewal window). If already expired, emits [`policy::PolicyExpired`]
+    /// when due and returns [`types::RenewPolicyOutcome::Lapsed`] in **`Ok`** (see type docs).
+    pub fn renew_policy(
+        env: Env,
+        holder: Address,
+        policy_id: u32,
+        age_band: types::AgeBand,
+        coverage_type: types::CoverageType,
+        safety_score: u32,
+    ) -> Result<types::RenewPolicyOutcome, policy::PolicyError> {
+        policy::renew_policy(
+            &env,
+            holder,
+            policy_id,
+            age_band,
+            coverage_type,
+            safety_score,
+        )
     }
 
     pub fn terminate_policy(
