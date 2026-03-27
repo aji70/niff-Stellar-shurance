@@ -65,6 +65,8 @@ pub enum Error {
     AppealNotOpen = 47,
     /// Appeal voting window is still open; cannot finalize appeal yet.
     AppealWindowStillOpen = 48,
+    /// Filing this claim would exceed the rolling paid cap for the current ledger window.
+    RollingClaimCapExceeded = 49,
 }
 
 pub fn check_policy(policy: &Policy) -> Result<(), Error> {

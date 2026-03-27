@@ -66,7 +66,7 @@
 // or deadline-plurality approval, which is controlled by the DAO snapshot, not
 // the admin. The admin cannot flip a `Rejected` claim to `Approved`.
 use crate::{
-    ledger, storage,
+    ledger, rolling_claim_cap, storage,
     types::{
         Claim, ClaimProcessed, ClaimStatus, TerminationReason, VoteOption,
         STRIKE_DEACTIVATION_THRESHOLD,
@@ -204,6 +204,8 @@ pub fn file_claim(
     }
 
     crate::validate::check_claim_fields(env, amount, policy.coverage, details, image_urls)?;
+
+    rolling_claim_cap::check_file_claim(env, holder, policy_id, amount, now)?;
 
     let claim_id = storage::next_claim_id(env);
     let claim = Claim {
@@ -386,6 +388,14 @@ pub fn process_claim(env: &Env, claim_id: u64) -> Result<(), Error> {
     }
 
     payout(env, &claim)?;
+    let pay_ledger = env.ledger().sequence();
+    rolling_claim_cap::record_claim_paid(
+        env,
+        &claim.claimant,
+        claim.policy_id,
+        claim.amount,
+        pay_ledger,
+    );
     claim.status = ClaimStatus::Paid;
     storage::set_open_claim(env, &claim.claimant, claim.policy_id, false);
     storage::set_claim(env, &claim);

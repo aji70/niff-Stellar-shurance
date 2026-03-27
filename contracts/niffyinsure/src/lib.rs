@@ -2,9 +2,11 @@
 #![allow(clippy::too_many_arguments)]
 
 pub mod admin;
+pub mod events;
 mod calculator;
 mod claim;
 mod ledger;
+mod rolling_claim_cap;
 mod policy;
 mod policy_lifecycle;
 pub mod premium;
@@ -65,6 +67,7 @@ impl NiffyInsure {
         storage::set_token(&env, &token);
         storage::set_multiplier_table(&env, &premium::default_multiplier_table(&env));
         storage::set_allowed_asset(&env, &token, true);
+        rolling_claim_cap::init_defaults(&env);
         Ok(())
     }
 
@@ -135,6 +138,13 @@ impl NiffyInsure {
             40 => validate::Error::VotingWindowStillOpen,
             41 => validate::Error::NotEligibleVoter,
             42 => validate::Error::RateLimitExceeded,
+            43 => validate::Error::AppealWindowClosed,
+            44 => validate::Error::AppealAlreadyOpen,
+            45 => validate::Error::MaxAppealsReached,
+            46 => validate::Error::ClaimNotRejected,
+            47 => validate::Error::AppealNotOpen,
+            48 => validate::Error::AppealWindowStillOpen,
+            49 => validate::Error::RollingClaimCapExceeded,
             _ => validate::Error::ClaimNotApproved,
         };
         policy::map_quote_error(&env, err)
@@ -199,35 +209,6 @@ impl NiffyInsure {
 
     pub fn get_claim(env: Env, claim_id: u64) -> Result<types::Claim, validate::Error> {
         claim::get_claim(&env, claim_id)
-    }
-
-    pub fn file_claim(
-        env: Env,
-        holder: Address,
-        policy_id: u32,
-        amount: i128,
-        details: String,
-        image_urls: Vec<String>,
-    ) -> u64 {
-        holder.require_auth();
-        claim::file_claim(&env, &holder, policy_id, amount, &details, &image_urls)
-            .unwrap_or_else(|e| panic_with_error!(&env, e))
-    }
-
-    pub fn vote_on_claim(
-        env: Env,
-        voter: Address,
-        claim_id: u64,
-        vote: types::VoteOption,
-    ) -> types::ClaimStatus {
-        voter.require_auth();
-        claim::vote_on_claim(&env, &voter, claim_id, &vote)
-            .unwrap_or_else(|e| panic_with_error!(&env, e))
-    }
-
-    pub fn finalize_claim(env: Env, claim_id: u64) -> types::ClaimStatus {
-        claim::finalize_claim(&env, claim_id)
-            .unwrap_or_else(|e| panic_with_error!(&env, e))
     }
 
     pub fn get_claim_counter(env: Env) -> u64 {
@@ -574,6 +555,51 @@ impl NiffyInsure {
     /// Get detailed pause flags (bind_paused, claims_paused).
     pub fn get_pause_flags(env: Env) -> storage::PauseFlags {
         storage::get_pause_flags(&env)
+    }
+
+    // ── Rolling claim cap (ledger-window cumulative paid per policy) ─────────
+
+    /// Global rolling cap on **paid** claim amounts per policy per ledger window (gross `claim.amount`).
+    /// `i128::MAX` means effectively uncapped.
+    pub fn get_rolling_claim_cap(env: Env) -> i128 {
+        storage::get_rolling_claim_cap(&env)
+    }
+
+    /// Ledger length of each rolling window bucket (aligned to `ledger_sequence / window`).
+    pub fn get_rolling_claim_window_ledgers(env: Env) -> u32 {
+        storage::get_rolling_claim_window_ledgers(&env)
+    }
+
+    /// Remaining amount that can be **filed** this window before hitting the cap (`0` if at/over cap).
+    /// Indexers can combine with cap and `get_rolling_claim_state` for full UI.
+    pub fn get_rolling_claim_remaining(
+        env: Env,
+        holder: Address,
+        policy_id: u32,
+    ) -> i128 {
+        let now = env.ledger().sequence();
+        rolling_claim_cap::remaining_under_cap(&env, &holder, policy_id, now)
+    }
+
+    /// Raw rolling state for `(holder, policy_id)` if present (window bucket + cumulative paid).
+    pub fn get_rolling_claim_state(
+        env: Env,
+        holder: Address,
+        policy_id: u32,
+    ) -> Option<types::RollingClaimWindowState> {
+        storage::get_rolling_claim_state(&env, &holder, policy_id)
+    }
+
+    /// Admin: set rolling claim cap. Bounded unless `i128::MAX` (uncapped). Emits `ClaimCapUpdated`.
+    pub fn set_rolling_claim_cap(env: Env, new_cap: i128) -> Result<(), AdminError> {
+        let _admin = admin::require_admin(&env);
+        rolling_claim_cap::try_set_cap(&env, new_cap)
+    }
+
+    /// Admin: set rolling window length in ledgers. Emits `RollingClaimWindowLedgersUpdated`.
+    pub fn set_rolling_claim_window_ledgers(env: Env, window_ledgers: u32) -> Result<(), AdminError> {
+        let _admin = admin::require_admin(&env);
+        rolling_claim_cap::try_set_window_ledgers(&env, window_ledgers)
     }
 }
 

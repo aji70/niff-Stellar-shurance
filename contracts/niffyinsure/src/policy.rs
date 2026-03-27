@@ -185,6 +185,9 @@ pub fn map_quote_error(env: &Env, err: Error) -> QuoteFailure {
         Error::ClaimNotRejected => "claim is not in rejected status; cannot open appeal",
         Error::AppealNotOpen => "no appeal is currently open",
         Error::AppealWindowStillOpen => "appeal voting window is still open; cannot finalize yet",
+        Error::RollingClaimCapExceeded => {
+            "rolling claim cap exceeded for this policy in the current ledger window; reduce amount or wait for the next window"
+        }
     };
     QuoteFailure {
         code: err as u32,

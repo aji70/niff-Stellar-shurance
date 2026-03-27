@@ -333,6 +333,18 @@ pub struct Claim {
     pub appeal_reject_votes: u32,
 }
 
+/// Per-policy rolling window accumulator for **paid** claim amounts (same ledger window for all policies).
+///
+/// `window_start` is the first ledger of the bucket: `floor(now / window_len) * window_len`.
+/// `cumulative_paid` resets when the bucket changes. Indexers can derive **remaining** as
+/// `min(rolling_claim_cap - cumulative_paid, policy.coverage)` for UX (cap is global).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RollingClaimWindowState {
+    pub window_start: u32,
+    pub cumulative_paid: i128,
+}
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PremiumQuoteLineItem {

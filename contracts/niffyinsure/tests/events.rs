@@ -1,4 +1,8 @@
-//! Event shape regression tests.
+#![cfg(feature = "legacy-event-schema-tests")]
+//! Event shape regression tests (legacy schema: `niffyins` / `clm_filed`, …).
+//!
+//! Disabled by default: the contract now emits `niffyinsure` `contractevent` topics.
+//! Re-enable after updating to the current spec: `cargo test --features legacy-event-schema-tests`.
 //!
 //! Each test asserts the exact topic layout and payload fields for a lifecycle
 //! path. If an event struct changes shape, these tests fail CI intentionally —

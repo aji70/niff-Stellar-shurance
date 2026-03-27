@@ -196,6 +196,14 @@
                     },
                     {
                       "key": {
+                        "symbol": "asset"
+                      },
+                      "val": {
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "claim_id"
                       },
                       "val": {
@@ -879,6 +887,30 @@
                               }
                             }
                           ]
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "RollingClaimCap"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "i128": "170141183460469231731687303715884105727"
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "RollingClaimWindowLedgers"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 1000000
                         }
                       },
                       {

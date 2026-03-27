@@ -11,7 +11,7 @@
 /// See SECURITY.md for the full threat matrix and multisig setup guidance.
 use soroban_sdk::{contracterror, contractevent, panic_with_error, Address, Env};
 
-use crate::{events, storage};
+use crate::storage;
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Ord, Eq)]
@@ -37,6 +37,10 @@ pub enum AdminError {
     AssetNotAllowlisted = 108,
     /// Sweep would violate protected balance constraints.
     ProtectedBalanceViolation = 109,
+    /// Rolling claim cap outside allowed bounds.
+    RollingClaimCapOutOfBounds = 110,
+    /// Rolling claim window length outside allowed bounds.
+    RollingClaimWindowOutOfBounds = 111,
 }
 
 #[contractevent(topics = ["niffyinsure", "admin_proposed"])]

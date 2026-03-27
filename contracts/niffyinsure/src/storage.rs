@@ -1,6 +1,6 @@
 use soroban_sdk::{contracttype, Address, Env, Vec};
 
-use crate::types::{Claim, MultiplierTable, Policy, VoteOption};
+use crate::types::{Claim, MultiplierTable, Policy, RollingClaimWindowState, VoteOption};
 
 // ── TTL constants ─────────────────────────────────────────────────────────────
 /// Minimum TTL threshold before we extend (in ledgers).
@@ -29,6 +29,10 @@ pub enum DataKey {
     ActivePolicyCount(Address),
     /// Optional per-transaction cap for emergency sweep operations (i128).
     SweepCap,
+    /// Max total **paid** claim amount per policy per rolling ledger window (gross `claim.amount`).
+    RollingClaimCap,
+    /// Ledger length of each rolling window (bucket alignment uses current ledger sequence).
+    RollingClaimWindowLedgers,
     // ── Persistent tier ──────────────────────────────────────────────────
     Policy(Address, u32),
     PolicyCounter(Address),
@@ -43,6 +47,8 @@ pub enum DataKey {
     LastClaimLedger(Address),
     /// (claim_id, voter_address) -> VoteOption for appeal round; immutable after first write.
     AppealVote(u64, Address),
+    /// Rolling paid total for `(holder, policy_id)` within the stored `window_start` bucket.
+    RollingClaimState(Address, u32),
 }
 
 // ── Instance bump ─────────────────────────────────────────────────────────────
@@ -488,4 +494,54 @@ pub fn get_appeal_vote(env: &Env, claim_id: u64, voter: &Address) -> Option<Vote
     env.storage()
         .persistent()
         .get(&DataKey::AppealVote(claim_id, voter.clone()))
+}
+
+// ── Rolling claim cap (instance + persistent) ─────────────────────────────────
+
+pub fn set_rolling_claim_cap(env: &Env, cap: i128) {
+    env.storage().instance().set(&DataKey::RollingClaimCap, &cap);
+}
+
+pub fn get_rolling_claim_cap(env: &Env) -> i128 {
+    env.storage()
+        .instance()
+        .get(&DataKey::RollingClaimCap)
+        .unwrap_or(i128::MAX)
+}
+
+pub fn set_rolling_claim_window_ledgers(env: &Env, w: u32) {
+    env.storage()
+        .instance()
+        .set(&DataKey::RollingClaimWindowLedgers, &w);
+}
+
+pub fn get_rolling_claim_window_ledgers(env: &Env) -> u32 {
+    env.storage()
+        .instance()
+        .get(&DataKey::RollingClaimWindowLedgers)
+        .unwrap_or(1_000_000)
+}
+
+pub fn get_rolling_claim_state(
+    env: &Env,
+    holder: &Address,
+    policy_id: u32,
+) -> Option<RollingClaimWindowState> {
+    env.storage().persistent().get(&DataKey::RollingClaimState(
+        holder.clone(),
+        policy_id,
+    ))
+}
+
+pub fn set_rolling_claim_state(
+    env: &Env,
+    holder: &Address,
+    policy_id: u32,
+    state: &RollingClaimWindowState,
+) {
+    let key = DataKey::RollingClaimState(holder.clone(), policy_id);
+    env.storage().persistent().set(&key, state);
+    env.storage()
+        .persistent()
+        .extend_ttl(&key, PERSISTENT_TTL_THRESHOLD, PERSISTENT_TTL_EXTEND_TO);
 }
