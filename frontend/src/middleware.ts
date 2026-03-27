@@ -21,6 +21,13 @@ const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL
   ? (() => { try { return new URL(process.env.NEXT_PUBLIC_API_URL).origin } catch { return '' } })()
   : ''
 
+// Analytics (Plausible) — only added to CSP when analytics is enabled
+const ANALYTICS_ENABLED = process.env.NEXT_PUBLIC_ANALYTICS_ENABLED === 'true'
+const ANALYTICS_SRC = process.env.NEXT_PUBLIC_ANALYTICS_SRC ?? 'https://plausible.io/js/script.js'
+const ANALYTICS_ORIGIN = ANALYTICS_ENABLED
+  ? (() => { try { return new URL(ANALYTICS_SRC).origin } catch { return '' } })()
+  : ''
+
 const REPORT_URI = process.env.CSP_REPORT_URI ?? ''
 const REPORT_ONLY = process.env.CSP_REPORT_ONLY === 'true'
 const CSP_HEADER = REPORT_ONLY
@@ -32,9 +39,7 @@ function buildCsp(nonce: string): string {
 
   return [
     `default-src 'self'`,
-    // Nonce covers Next.js inline bootstrapper (__NEXT_DATA__, chunk loader).
-    // No unsafe-inline needed when a nonce is present.
-    `script-src 'self' 'nonce-${nonce}'`,
+    `script-src 'self' 'nonce-${nonce}' ${ANALYTICS_ORIGIN}`.trim(),
     // Tailwind injects styles at runtime; unsafe-inline required until
     // build-time CSS extraction is adopted. Track in: TODO(csp-style-nonce).
     `style-src 'self' 'unsafe-inline'`,
@@ -44,6 +49,8 @@ function buildCsp(nonce: string): string {
     [
       `connect-src 'self'`,
       API_ORIGIN,
+      // Analytics (Plausible) — only when enabled
+      ANALYTICS_ORIGIN,
       // Soroban RPC + Horizon — testnet
       // Ref: https://developers.stellar.org/network/soroban-rpc
       'https://soroban-testnet.stellar.org',

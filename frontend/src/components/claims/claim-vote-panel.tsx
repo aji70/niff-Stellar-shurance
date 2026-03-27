@@ -25,6 +25,7 @@ import {
   isTerminal,
   isVoteOpen,
 } from '@/lib/schemas/vote'
+import { trackVoteCast } from '@/lib/analytics'
 
 interface ClaimVotePanelProps {
   claimId: string
@@ -145,6 +146,7 @@ export function ClaimVotePanel({
       )
       setEligibility((prev) => (prev ? { ...prev, priorVote: pendingVote } : prev))
       setSubmitState('done')
+      trackVoteCast(pendingVote === 'Approve' ? 'approve' : 'reject')
 
       toast({
         title: 'Vote submitted',

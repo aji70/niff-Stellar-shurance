@@ -7,6 +7,7 @@ import { PolicyInitiationSchema, PolicyInitiationData, Transaction, Policy } fro
 import { PolicyAPI, PolicyError, getPolicyErrorMessage, getExplorerUrl } from '@/lib/api/policy'
 import { QuoteAPI, QuoteError, getQuoteErrorMessage } from '@/lib/api/quote'
 import type { QuoteResponse } from '@/lib/schemas/quote'
+import { trackBindStarted, trackBindWalletConnected, trackBindCompleted } from '@/lib/analytics'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -115,6 +116,7 @@ export function PolicyInitiation({ quoteId: propQuoteId }: PolicyInitiationProps
       setWalletConnected(true)
       setValue('walletAddress', mockAddress)
       setCurrentStep(2)
+      trackBindWalletConnected()
       
       toast({
         title: 'Wallet Connected',
@@ -165,6 +167,7 @@ export function PolicyInitiation({ quoteId: propQuoteId }: PolicyInitiationProps
       // Poll for policy confirmation
       const confirmedPolicy = await PolicyAPI.pollPolicyStatus(result.policyId)
       setPolicy(confirmedPolicy)
+      trackBindCompleted()
       
       toast({
         title: 'Policy Created!',

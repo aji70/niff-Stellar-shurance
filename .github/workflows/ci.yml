@@ -200,3 +200,71 @@ jobs:
       - run: npm run check-docs
       - run: npm run build
       - run: npm test
+
+  # ── Playwright e2e ────────────────────────────────────────────────────────
+  # Runs headless Chromium tests against a production build of the frontend.
+  # Traces and screenshots are uploaded as artifacts on failure so engineers
+  # can debug within minutes without reproducing locally.
+  #
+  # Secrets: no testnet accounts are used — all API and wallet calls are
+  # mocked at the network layer via Playwright route interception.
+  #
+  # Flake policy: tests retry up to 2 times (configured in playwright.config.ts).
+  # Persistent flakes must be quarantined in e2e/quarantine/ and tracked in a
+  # GitHub issue within 48 hours of detection.
+  playwright:
+    name: Playwright e2e
+    runs-on: ubuntu-latest
+    needs: frontend
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      CI: true
+      # Analytics disabled in CI — no real Plausible domain configured
+      NEXT_PUBLIC_ANALYTICS_ENABLED: "false"
+      NEXT_PUBLIC_API_URL: "http://localhost:3001"
+      NEXT_PUBLIC_SOROBAN_RPC_URL: "https://soroban-testnet.stellar.org"
+      NEXT_PUBLIC_HORIZON_URL: "https://horizon-testnet.stellar.org"
+      NEXT_PUBLIC_NETWORK: "testnet"
+      NEXT_PUBLIC_CONTRACT_ID: "mock-contract-id"
+      NEXT_PUBLIC_IPFS_GATEWAY: "https://ipfs.io/ipfs"
+      NEXT_PUBLIC_CAPTCHA_SITE_KEY: ""
+      NEXT_PUBLIC_CAPTCHA_PROVIDER: "turnstile"
+      PLAYWRIGHT_BASE_URL: "http://localhost:3000"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Build Next.js app
+        run: npm run build
+
+      - name: Start Next.js preview server
+        run: npx next start --port 3000 &
+        # Give the server a moment to start; Playwright will wait for baseURL
+
+      - name: Wait for server
+        run: npx wait-on http://localhost:3000 --timeout 30000
+
+      - name: Run Playwright tests
+        run: npx playwright test
+
+      - name: Upload Playwright traces and screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts-${{ github.sha }}
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7

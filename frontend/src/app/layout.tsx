@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { inter, ibmPlexMono } from "@/lib/fonts";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AnalyticsScript } from "@/components/analytics-script";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -76,6 +77,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/site.webmanifest" />
+        <AnalyticsScript nonce={nonce} />
       </head>
       <body className="font-sans antialiased">
         <ThemeProvider defaultTheme="system" storageKey="niffyinsur-theme">

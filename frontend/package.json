@@ -8,6 +8,8 @@
     "analyze": "ANALYZE=true next build",
     "lint": "next lint",
     "test": "jest --passWithNoTests",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "check-docs": "node scripts/check-docs-links.js"
   },
   "dependencies": {
@@ -30,6 +32,7 @@
   },
   "devDependencies": {
     "@next/bundle-analyzer": "^15.2.3",
+    "@playwright/test": "^1.49.0",
     "@tailwindcss/postcss": "^4.2.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -45,6 +48,7 @@
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.2",
     "ts-jest": "^29.4.6",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wait-on": "^8.0.1"
   }
 }
