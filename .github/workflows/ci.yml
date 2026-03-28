@@ -171,3 +171,44 @@ jobs:
             playwright-report
             traces
             .playwright/traces
+
+  api-e2e:
+    name: API E2E tests (Supertest + Testcontainers)
+    runs-on: ubuntu-latest
+    # Docker daemon is available on ubuntu-latest — required by Testcontainers
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Run API E2E tests
+        run: npm run test:e2e:ci
+        env:
+          # Testcontainers pulls images; no extra env needed — containers are
+          # started programmatically in global-setup.ts with ephemeral creds.
+          TESTCONTAINERS_RYUK_DISABLED: 'false'
+          NODE_ENV: test
+
+      - name: Upload E2E failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-e2e-logs-${{ github.run_id }}
+          path: |
+            backend/test-results
+            backend/logs
+          retention-days: 7
