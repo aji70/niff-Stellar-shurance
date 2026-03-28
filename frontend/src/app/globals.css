@@ -150,4 +150,10 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+
+  /* Tailwind animate-spin is used on loading spinners — keep it visible but
+     instant so the element is still present for screen readers without motion */
+  .animate-spin {
+    animation: none !important;
+  }
 }

@@ -26,6 +26,7 @@ export function QuoteForm({ onQuoteReceived }: QuoteFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [currentQuote, setCurrentQuote] = useState<QuoteResponse | null>(null)
   const [isCalculating, setIsCalculating] = useState(false)
+  const [quoteStatus, setQuoteStatus] = useState('')
   
   const {
     register,
@@ -59,6 +60,7 @@ export function QuoteForm({ onQuoteReceived }: QuoteFormProps) {
         setIsCalculating(true)
         const quote = await QuoteAPI.getQuote(watchedValues)
         setCurrentQuote(quote)
+        setQuoteStatus(`Quote updated: premium ${quote.premium} XLM for ${quote.coverageAmount} XLM coverage.`)
       } catch (error) {
         if (error instanceof QuoteError && error.code !== 'VALIDATION_ERROR') {
           toast({
@@ -68,6 +70,7 @@ export function QuoteForm({ onQuoteReceived }: QuoteFormProps) {
           })
         }
         setCurrentQuote(null)
+        setQuoteStatus('')
       } finally {
         setIsCalculating(false)
       }
@@ -81,6 +84,7 @@ export function QuoteForm({ onQuoteReceived }: QuoteFormProps) {
       setIsSubmitting(true)
       const quote = await QuoteAPI.getQuote(data)
       setCurrentQuote(quote)
+      setQuoteStatus(`Quote confirmed: premium ${quote.premium} XLM.`)
       onQuoteReceived?.(quote)
       
       toast({
@@ -121,6 +125,10 @@ export function QuoteForm({ onQuoteReceived }: QuoteFormProps) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 min-w-0">
+      {/* Live region announces quote updates to screen readers */}
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {isCalculating ? 'Calculating quote…' : quoteStatus}
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>Get Insurance Quote</CardTitle>
