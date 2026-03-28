@@ -1,6 +1,6 @@
 {
   "generators": {
-    "address": 4,
+    "address": 5,
     "nonce": 0,
     "mux_id": 0
   },
@@ -207,6 +207,14 @@
                             "symbol": "Processing"
                           }
                         ]
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "status_history"
+                      },
+                      "val": {
+                        "vec": []
                       }
                     },
                     {

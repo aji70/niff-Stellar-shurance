@@ -168,6 +168,7 @@ fn set_and_get_claim_round_trip() {
             appeal_deadline_ledger: 0,
             appeal_approve_votes: 0,
             appeal_reject_votes: 0,
+            status_history: soroban_sdk::Vec::new(&env),
         };
         storage::set_claim(&env, &claim);
         let loaded = storage::get_claim(&env, 1).expect("claim must exist");
@@ -444,6 +445,7 @@ fn make_claim(env: &Env, claim_id: u64, holder: &Address, asset: &Address) -> ni
         appeal_deadline_ledger: 0,
         appeal_approve_votes: 0,
         appeal_reject_votes: 0,
+        status_history: soroban_sdk::Vec::new(env),
     }
 }
 
