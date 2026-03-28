@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SorobanService } from '../rpc/soroban.service';
+import { parseEvent } from '../events/events.schema';
+import { QuoteSimulationCacheService } from '../quote/quote-simulation-cache.service';
 import { rpc as SorobanRpc, scValToNative } from '@stellar/stellar-sdk';
 
 type IndexerTx = Prisma.TransactionClient;
@@ -78,6 +80,7 @@ export class IndexerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly soroban: SorobanService,
+    private readonly quoteSimulationCache: QuoteSimulationCacheService,
   ) {}
 
   async processNextBatch() {
@@ -143,7 +146,7 @@ export class IndexerService {
 
     const parsed = parseEvent(topics, dataNative, event.ledger, txHash);
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: IndexerTx) => {
       // Idempotent raw-event store — unique constraint on (txHash, eventIndex).
       await tx.rawEvent.upsert({
         where: { txHash_eventIndex: { txHash, eventIndex: index } },
@@ -177,6 +180,10 @@ export class IndexerService {
         await this.handleClaimProcessed(tx, dataNative, event);
       }
     });
+
+    if (parsed?.key === 'niffyins:tbl_upd') {
+      await this.quoteSimulationCache.invalidateAll();
+    }
   }
 
   private async handlePolicyInitiated(tx: IndexerTx, data: EventPayload, event: SorobanEvent) {
@@ -221,19 +228,15 @@ export class IndexerService {
 
   private async handleClaimFiled(tx: IndexerTx, data: EventPayload, event: SorobanEvent) {
     const claimId = getNumberValue(data.claim_id);
-    const id = `${getStringValue(data.claimant)}:${getNumberValue(data.policy_id)}`;
+    const holder = getStringValue(data.claimant);
+    const policyDbId = `${holder}:${getNumberValue(data.policy_id)}`;
 
-  private async handleClaimFiled(tx: any, data: ClaimFiledEvent, ids: unknown[], event: any) {
-    // ids[0] = claim_id (u64), ids[1] = holder (Address)
-    const claimId = Number(ids[0]);
-    const holder = String(ids[1]);
-    const policyDbId = `${holder}:${data.policy_id}`;
     await tx.claim.upsert({
       where: { id: claimId },
       create: {
         id: claimId,
-        policyId: id,
-        creatorAddress: getStringValue(data.claimant),
+        policyId: policyDbId,
+        creatorAddress: holder,
         amount: getStringValue(data.amount),
         asset: getStringValue(data.asset),
         description: getStringValue(data.details),
@@ -245,23 +248,22 @@ export class IndexerService {
         txHash: event.txHash,
       },
       update: {
-        // Already exists from previous vote or processing (shouldn't happen with correct order but handle it)
         amount: getStringValue(data.amount),
         description: getStringValue(data.details),
         imageUrls: getStringArray(data.image_urls),
-      }
+      },
     });
   }
 
   private async handleVoteCast(
     tx: IndexerTx,
     topics: StellarNativeValue[],
-    data: StellarNativeValue,
+    data: EventPayload,
     event: SorobanEvent,
   ) {
     const claimId = Number(topics[1]);
     const voter = topics[2]?.toString();
-    const option = getStringValue(data); // VoteOption enum: "Approve" or "Reject"
+    const option = getStringValue(data);
 
     if (!voter) {
       this.logger.warn(`Skipping vote event for claim ${claimId}: missing voter topic`);
@@ -279,23 +281,13 @@ export class IndexerService {
       },
       update: {
         vote: option === 'Approve' ? 'APPROVE' : 'REJECT',
-      }
+      },
     });
-    await tx.claim.update({
-      where: { id: claimId },
-      data: { approveVotes: data.approve_votes, rejectVotes: data.reject_votes },
-    });
-  }
-
-  private async handleClaimFinalized(tx: any, data: ClaimFinalizedEvent, ids: unknown[]) {
-    const claimId = Number(ids[0]);
     await tx.claim.update({
       where: { id: claimId },
       data: {
-        status: data.status === 'Approved' ? 'APPROVED' : 'REJECTED',
-        approveVotes: data.approve_votes,
-        rejectVotes: data.reject_votes,
-        updatedAtLedger: data.at_ledger,
+        approveVotes: getNumberValue(data.approve_votes),
+        rejectVotes: getNumberValue(data.reject_votes),
       },
     });
   }

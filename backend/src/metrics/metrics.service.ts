@@ -30,6 +30,8 @@ export class MetricsService implements OnModuleInit {
   readonly rpcCallDuration: client.Histogram<string>;
   readonly rpcCallTotal: client.Counter<string>;
   readonly rpcErrorTotal: client.Counter<string>;
+  /** result: hit | miss | bypass — quote simulation Redis cache */
+  readonly quoteSimulationCacheTotal: client.Counter<string>;
 
   constructor() {
     this.registry = new client.Registry();
@@ -80,6 +82,13 @@ export class MetricsService implements OnModuleInit {
       name: 'rpc_errors_total',
       help: 'Total Soroban RPC errors',
       labelNames: ['rpc_method', 'error_type'],
+      registers: [this.registry],
+    });
+
+    this.quoteSimulationCacheTotal = new client.Counter({
+      name: 'quote_simulation_cache_requests_total',
+      help: 'Quote simulation cache lookups (hit/miss/bypass)',
+      labelNames: ['result'],
       registers: [this.registry],
     });
   }
@@ -134,6 +143,10 @@ export class MetricsService implements OnModuleInit {
     if (status === 'error' && errorType) {
       this.rpcErrorTotal.inc({ rpc_method: rpcMethod, error_type: errorType });
     }
+  }
+
+  recordQuoteSimulationCache(result: 'hit' | 'miss' | 'bypass') {
+    this.quoteSimulationCacheTotal.inc({ result });
   }
 
   async getMetrics(): Promise<string> {

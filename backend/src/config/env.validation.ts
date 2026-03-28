@@ -80,6 +80,16 @@ export const validationSchema = Joi.object({
   CACHE_TTL_SECONDS: Joi.number()
     .default(60)
     .description("Cache TTL in seconds"),
+  QUOTE_SIMULATION_CACHE_ENABLED: Joi.string()
+    .valid("true", "false", "1", "0")
+    .default("true")
+    .description("Redis cache for successful Soroban quote simulations"),
+  QUOTE_SIMULATION_CACHE_TTL_SECONDS: Joi.number()
+    .integer()
+    .min(1)
+    .max(600)
+    .default(30)
+    .description("TTL for quote simulation cache entries (seconds)"),
   // CAPTCHA (Turnstile or hCaptcha)
   CAPTCHA_PROVIDER: Joi.string()
     .valid("turnstile", "hcaptcha")

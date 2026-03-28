@@ -26,6 +26,14 @@ Restrict it at the ingress/firewall level — it must not be publicly reachable.
 
 `error_type` values: `client_error`, `unavailable`, `unknown`.
 
+### Quote simulation cache
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `quote_simulation_cache_requests_total` | Counter | `result` | `hit` = Redis served; `miss` = computed via RPC; `bypass` = `Cache-Control: no-cache` |
+
+See [quote-simulation-cache.md](./quote-simulation-cache.md) for TTL and invalidation.
+
 ### Cardinality notes
 
 - `route` is normalised: numeric path segments → `:id`, UUIDs → `:uuid`,
