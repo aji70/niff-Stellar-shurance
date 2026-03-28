@@ -65,6 +65,12 @@ export const RENEWAL_OPEN_LEDGERS_BEFORE_EXPIRY = 120_960;
  *
  * Default: 17,280 ledgers ≈ 1 day (17,280 × 5 s = 86,400 s).
  * The last valid renewal ledger is endLedger + RENEWAL_GRACE_LEDGERS_AFTER_EXPIRY - 1.
+ *
+ * NOTE: This constant mirrors DEFAULT_GRACE_PERIOD_LEDGERS in the Soroban contract
+ * (contracts/niffyinsure/src/ledger.rs). The live value is admin-configurable via
+ * set_grace_period_ledgers(); fetch it from get_grace_period_ledgers() for
+ * authoritative checks. This constant is used only as a UI fallback when the
+ * on-chain value has not yet been fetched.
  */
 export const RENEWAL_GRACE_LEDGERS_AFTER_EXPIRY = 17_280;
 

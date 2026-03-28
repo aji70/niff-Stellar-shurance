@@ -54,6 +54,8 @@ pub enum DataKey {
     AppealVote(u64, Address),
     /// Configurable voting window in ledgers (set by admin via set_voting_duration_ledgers).
     VoteDurLedgers,
+    /// Configurable grace period in ledgers after nominal expiry for late renewals.
+    GracePeriodLedgers,
 }
 
 // ── Instance bump ─────────────────────────────────────────────────────────────
@@ -147,6 +149,23 @@ pub fn get_voting_duration_ledgers(env: &Env) -> u32 {
         .instance()
         .get(&DataKey::VoteDurLedgers)
         .unwrap_or(ledger::VOTE_WINDOW_LEDGERS)
+}
+
+// ── Grace period (instance) ───────────────────────────────────────────────────
+
+pub fn set_grace_period_ledgers(env: &Env, ledgers: u32) {
+    env.storage()
+        .instance()
+        .set(&DataKey::GracePeriodLedgers, &ledgers);
+}
+
+/// Grace period added after nominal expiry for late renewals.
+/// Defaults to [`ledger::DEFAULT_GRACE_PERIOD_LEDGERS`] when unset.
+pub fn get_grace_period_ledgers(env: &Env) -> u32 {
+    env.storage()
+        .instance()
+        .get(&DataKey::GracePeriodLedgers)
+        .unwrap_or(ledger::DEFAULT_GRACE_PERIOD_LEDGERS)
 }
 
 // ── External calculator address ───────────────────────────────────────────────

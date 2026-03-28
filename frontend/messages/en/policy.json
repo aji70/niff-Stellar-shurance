@@ -17,7 +17,11 @@
     "expiry": "Policy Expires",
     "active": "Active",
     "expired": "Expired",
-    "pending": "Pending"
+    "pending": "Pending",
+    "renewalWindow": "Renewal opens {days} days before expiry",
+    "gracePeriod": "Grace period: renew up to {days} day(s) after expiry with no coverage gap",
+    "gracePeriodCountdown": "Grace period ends in {ledgers} ledgers (~{minutes} min)",
+    "renewalLedgerNote": "Countdown uses ledger sequence numbers (1 ledger ≈ 5 s). The last valid renewal ledger is expiry + grace − 1."
   },
   "coverageTier": {
     "label": "Coverage Tier",

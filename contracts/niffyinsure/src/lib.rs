@@ -26,6 +26,7 @@ use soroban_sdk::{contract, contractevent, contractimpl, panic_with_error, Addre
 #[contract]
 pub struct NiffyInsure;
 pub use admin::AdminError;
+pub use policy::RenewalError;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[soroban_sdk::contracterror]
@@ -222,6 +223,43 @@ impl NiffyInsure {
         ledger::validate_voting_duration_ledgers(ledgers)?;
         storage::set_voting_duration_ledgers(&env, ledgers);
         Ok(())
+    }
+
+    // ── Grace period ──────────────────────────────────────────────────────────
+
+    /// Admin-only: set the grace period (in ledgers) after nominal expiry during
+    /// which late renewals are still accepted. Emits GracePeriodUpdated.
+    pub fn set_grace_period_ledgers(env: Env, ledgers: u32) -> Result<(), policy::RenewalError> {
+        storage::bump_instance(&env);
+        policy::set_grace_period_ledgers(&env, ledgers)
+    }
+
+    pub fn get_grace_period_ledgers(env: Env) -> u32 {
+        policy::get_grace_period_ledgers(&env)
+    }
+
+    // ── Renewal ───────────────────────────────────────────────────────────────
+
+    /// Renew an existing active policy within the standard or grace window.
+    pub fn renew_policy(
+        env: Env,
+        holder: Address,
+        policy_id: u32,
+        age_band: types::AgeBand,
+        coverage_type: types::CoverageTier,
+        safety_score: u32,
+        base_amount: i128,
+    ) -> Result<types::Policy, policy::RenewalError> {
+        storage::bump_instance(&env);
+        policy::renew_policy(
+            &env,
+            holder,
+            policy_id,
+            age_band,
+            coverage_type,
+            safety_score,
+            base_amount,
+        )
     }
 
     pub fn process_claim(env: Env, claim_id: u64) -> Result<(), validate::Error> {
@@ -691,6 +729,19 @@ impl NiffyInsure {
 
     pub fn test_remove_voter(env: Env, holder: Address) {
         storage::remove_voter(&env, &holder);
+    }
+
+    /// Test-only: advance a seeded policy's end_ledger to simulate a renewal
+    /// without going through token transfer. Mirrors what renew_policy does
+    /// to the policy record after premium collection.
+    pub fn test_renew_policy(env: Env, holder: Address, policy_id: u32) {
+        let mut policy = storage::get_policy(&env, &holder, policy_id)
+            .expect("policy not found");
+        let new_start = policy.end_ledger.saturating_add(1);
+        let new_end = new_start + ledger::POLICY_DURATION_LEDGERS;
+        policy.start_ledger = new_start;
+        policy.end_ledger = new_end;
+        storage::set_policy(&env, &holder, policy_id, &policy);
     }
 
     pub fn admin_set_open_claim_count(

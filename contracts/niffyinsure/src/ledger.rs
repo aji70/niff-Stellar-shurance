@@ -92,8 +92,19 @@ pub const MIN_VOTING_DURATION_LEDGERS: u32 = LEDGERS_PER_DAY;
 pub const MAX_VOTING_DURATION_LEDGERS: u32 = 8 * LEDGERS_PER_WEEK;
 
 /// Renewal window: holder may renew starting this many ledgers before expiry.
-/// Renewal is accepted while `end - RENEWAL_WINDOW_LEDGERS <= now < end`.
+/// Renewal is accepted while `end - RENEWAL_WINDOW_LEDGERS <= now < end + grace`.
 pub const RENEWAL_WINDOW_LEDGERS: u32 = 3 * LEDGERS_PER_DAY; // 51_840
+
+/// Default grace period added after nominal expiry for late renewals.
+/// Renewal is accepted while `now < end + grace_period_ledgers`.
+/// Default: 17_280 ledgers ≈ 1 day.
+pub const DEFAULT_GRACE_PERIOD_LEDGERS: u32 = LEDGERS_PER_DAY; // 17_280
+
+/// Minimum admin-settable grace period (1 hour).
+pub const MIN_GRACE_PERIOD_LEDGERS: u32 = LEDGERS_PER_HOUR; // 720
+
+/// Maximum admin-settable grace period (7 days).
+pub const MAX_GRACE_PERIOD_LEDGERS: u32 = 7 * LEDGERS_PER_DAY; // 120_960
 
 /// Rate-limit window: minimum ledgers between successive claim filings by the
 /// same policyholder.  Prevents claim spam.
@@ -153,6 +164,26 @@ pub fn is_expired(now: u32, end: u32) -> bool {
 pub fn is_in_renewal_window(now: u32, end: u32, window: u32) -> bool {
     let renewal_start = end.saturating_sub(window);
     is_within_window(now, renewal_start, end)
+}
+
+/// Returns `true` if `now` is within the extended renewal window that includes
+/// the grace period: `[end - window, end + grace)`.
+///
+/// - `now < end`              → standard renewal window (no gap)
+/// - `end <= now < end+grace` → grace period (late renewal, no coverage gap)
+/// - `now >= end + grace`     → lapsed; renewal rejected
+#[inline]
+pub fn is_in_renewal_window_with_grace(now: u32, end: u32, window: u32, grace: u32) -> bool {
+    let renewal_start = end.saturating_sub(window);
+    let grace_end = end.saturating_add(grace);
+    now >= renewal_start && now < grace_end
+}
+
+/// Validates admin-supplied grace period before it is written to instance storage.
+/// Returns `true` if valid.
+#[inline]
+pub fn is_valid_grace_period_ledgers(v: u32) -> bool {
+    (MIN_GRACE_PERIOD_LEDGERS..=MAX_GRACE_PERIOD_LEDGERS).contains(&v)
 }
 
 /// Returns `true` if the voting deadline has not yet passed.
