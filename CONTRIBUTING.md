@@ -83,6 +83,28 @@ When adding new interactive components:
 
 # Contributing
 
+## Local prerequisites
+
+### API E2E tests
+
+The API E2E suite spins up real Postgres and Redis containers via [Testcontainers](https://testcontainers.com/). You need:
+
+- **Docker Desktop** (or any Docker-compatible daemon) running locally.
+- Node 20+.
+
+No `.env` file is needed — the global setup injects all ephemeral credentials at runtime.
+
+```bash
+cd backend
+npm ci
+npx prisma generate
+npm run test:e2e
+```
+
+The first run pulls `postgres:16-alpine` and `redis:7-alpine` (~100 MB total). Subsequent runs use the local Docker cache and start in seconds.
+
+> **Tip:** If a test hangs, check that Docker is running: `docker info`.
+
 ## Soroban ABI golden vectors
 
 The file `backend/src/soroban/golden-vectors.json` records the exact ScVal
