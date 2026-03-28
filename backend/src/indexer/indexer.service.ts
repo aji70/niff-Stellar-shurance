@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SorobanService } from '../rpc/soroban.service';
 import { rpc as SorobanRpc, scValToNative } from '@stellar/stellar-sdk';
+import { tryNormalizeAddress } from '../common/utils/normalize-address';
 
 type IndexerTx = Prisma.TransactionClient;
 type SorobanEvent = SorobanRpc.Api.EventResponse;
@@ -180,7 +181,7 @@ export class IndexerService {
   }
 
   private async handlePolicyInitiated(tx: IndexerTx, data: EventPayload, event: SorobanEvent) {
-    const holder = getStringValue(data.holder);
+    const holder = tryNormalizeAddress(getStringValue(data.holder)) ?? getStringValue(data.holder);
     const policyId = getNumberValue(data.policy_id);
     const id = `${holder}:${policyId}`;
 
@@ -209,7 +210,8 @@ export class IndexerService {
   }
 
   private async handlePolicyRenewed(tx: IndexerTx, data: EventPayload) {
-    const id = `${getStringValue(data.holder)}:${getNumberValue(data.policy_id)}`;
+    const holder = tryNormalizeAddress(getStringValue(data.holder)) ?? getStringValue(data.holder);
+    const id = `${holder}:${getNumberValue(data.policy_id)}`;
     await tx.policy.update({
       where: { id },
       data: {
@@ -260,7 +262,8 @@ export class IndexerService {
     event: SorobanEvent,
   ) {
     const claimId = Number(topics[1]);
-    const voter = topics[2]?.toString();
+    const rawVoter = topics[2]?.toString() ?? '';
+    const voter = tryNormalizeAddress(rawVoter) ?? rawVoter;
     const option = getStringValue(data); // VoteOption enum: "Approve" or "Reject"
 
     if (!voter) {
@@ -268,6 +271,8 @@ export class IndexerService {
       return;
     }
 
+    // Idempotent upsert — unique constraint on (claimId, voterAddress) prevents duplicates.
+    // update:{} means a duplicate event is a no-op; tally is recomputed from COUNT below.
     await tx.vote.upsert({
       where: { claimId_voterAddress: { claimId, voterAddress: voter } },
       create: {
@@ -277,13 +282,17 @@ export class IndexerService {
         votedAtLedger: event.ledger,
         txHash: event.txHash,
       },
-      update: {
-        vote: option === 'Approve' ? 'APPROVE' : 'REJECT',
-      }
+      update: {},
     });
+
+    // Recompute tallies from the authoritative vote rows — never trust event payload counts.
+    const [approveCount, rejectCount] = await Promise.all([
+      tx.vote.count({ where: { claimId, vote: 'APPROVE' } }),
+      tx.vote.count({ where: { claimId, vote: 'REJECT' } }),
+    ]);
     await tx.claim.update({
       where: { id: claimId },
-      data: { approveVotes: data.approve_votes, rejectVotes: data.reject_votes },
+      data: { approveVotes: approveCount, rejectVotes: rejectCount },
     });
   }
 

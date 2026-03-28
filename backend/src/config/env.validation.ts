@@ -9,7 +9,15 @@ export const validationSchema = Joi.object({
     .required()
     .description("PostgreSQL connection URL"),
   REDIS_URL: Joi.string().required().description("Redis connection URL"),
+  STELLAR_NETWORK: Joi.string()
+    .valid('testnet', 'mainnet', 'futurenet')
+    .default('testnet')
+    .description('Active Stellar network'),
   SOROBAN_RPC_URL: Joi.string().required().description("Soroban RPC endpoint"),
+  HORIZON_URL: Joi.string().uri().description('Horizon endpoint for the active network'),
+  STELLAR_NETWORK_PASSPHRASE: Joi.string().description('Canonical network passphrase'),
+  CONTRACT_ID: Joi.string().allow('').description('niffyinsure contract ID on the active network'),
+  DEFAULT_TOKEN_CONTRACT_ID: Joi.string().allow('').description('Default SEP-41 token contract ID'),
   // IPFS Configuration
   IPFS_PROVIDER: Joi.string()
     .valid("mock", "pinata")
