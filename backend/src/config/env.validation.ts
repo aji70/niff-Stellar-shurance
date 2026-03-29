@@ -14,10 +14,19 @@ export const validationSchema = Joi.object({
     .default('testnet')
     .description('Active Stellar network'),
   SOROBAN_RPC_URL: Joi.string().required().description("Soroban RPC endpoint"),
-  HORIZON_URL: Joi.string().uri().description('Horizon endpoint for the active network'),
-  STELLAR_NETWORK_PASSPHRASE: Joi.string().description('Canonical network passphrase'),
-  CONTRACT_ID: Joi.string().allow('').description('niffyinsure contract ID on the active network'),
-  DEFAULT_TOKEN_CONTRACT_ID: Joi.string().allow('').description('Default SEP-41 token contract ID'),
+  STELLAR_NETWORK: Joi.string()
+    .default("testnet")
+    .description("Logical network id for indexer cursor isolation (e.g. testnet, public)"),
+  INDEXER_GAP_ALERT_THRESHOLD_LEDGERS: Joi.number()
+    .integer()
+    .min(1)
+    .default(100)
+    .description("Alert when chain head minus last_processed exceeds this"),
+  INDEXER_GAP_ALERT_COOLDOWN_MS: Joi.number()
+    .integer()
+    .min(60_000)
+    .default(3_600_000)
+    .description("Minimum milliseconds between gap alerts per network"),
   // IPFS Configuration
   IPFS_PROVIDER: Joi.string()
     .valid("mock", "pinata")
@@ -88,6 +97,16 @@ export const validationSchema = Joi.object({
   CACHE_TTL_SECONDS: Joi.number()
     .default(60)
     .description("Cache TTL in seconds"),
+  QUOTE_SIMULATION_CACHE_ENABLED: Joi.string()
+    .valid("true", "false", "1", "0")
+    .default("true")
+    .description("Redis cache for successful Soroban quote simulations"),
+  QUOTE_SIMULATION_CACHE_TTL_SECONDS: Joi.number()
+    .integer()
+    .min(1)
+    .max(600)
+    .default(30)
+    .description("TTL for quote simulation cache entries (seconds)"),
   // CAPTCHA (Turnstile or hCaptcha)
   CAPTCHA_PROVIDER: Joi.string()
     .valid("turnstile", "hcaptcha")

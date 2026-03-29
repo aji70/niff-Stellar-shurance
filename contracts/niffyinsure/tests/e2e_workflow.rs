@@ -7,13 +7,15 @@
 
 #![cfg(test)]
 
+mod common;
+
 use niffyinsure::{
     types::{AgeBand, ClaimStatus, CoverageTier, PolicyType, RegionTier, VoteOption},
     NiffyInsureClient,
 };
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
-    token, vec, Address, Env, String,
+    token, Address, Env, String,
 };
 
 // ── Test Configuration ───────────────────────────────────────────────────────────
@@ -84,16 +86,17 @@ fn e2e_full_lifecycle_approve() {
         &1_000_000, // base_amount (coverage)
         &token,
         &None,
+        &None,
     );
     assert!(policy.is_active);
     let policy_id = policy.policy_id;
 
     // Step 2: File a claim
     let details = String::from_str(&env, "Test claim for damage");
-    let urls = vec![&env];
+    let ev = common::empty_evidence(&env);
     let claim_id = client.file_claim(
         &holder, &policy_id, &50_000, // claim amount
-        &details, &urls,
+        &details, &ev,
     );
     assert_eq!(claim_id, 1);
 
@@ -140,12 +143,13 @@ fn e2e_full_lifecycle_reject() {
         &500_000,
         &token,
         &None,
+        &None,
     );
     let policy_id = policy.policy_id;
 
     let details = String::from_str(&env, "Rejected claim");
-    let urls = vec![&env];
-    let claim_id = client.file_claim(&holder, &policy_id, &25_000, &details, &urls);
+    let ev = common::empty_evidence(&env);
+    let claim_id = client.file_claim(&holder, &policy_id, &25_000, &details, &ev);
 
     // Vote to reject (2/3 majority)
     client.vote_on_claim(&voter1, &claim_id, &VoteOption::Reject);
@@ -180,12 +184,13 @@ fn e2e_finalize_after_deadline() {
         &2_000_000,
         &token,
         &None,
+        &None,
     );
     let policy_id = policy.policy_id;
 
     let details = String::from_str(&env, "Claim for review");
-    let urls = vec![&env];
-    let claim_id = client.file_claim(&holder, &policy_id, &100_000, &details, &urls);
+    let ev = common::empty_evidence(&env);
+    let claim_id = client.file_claim(&holder, &policy_id, &100_000, &details, &ev);
 
     // Vote once (not enough for majority)
     client.vote_on_claim(&voter1, &claim_id, &VoteOption::Approve);
@@ -230,6 +235,7 @@ fn e2e_pause_blocks_initiate() {
         &1_000_000,
         &token,
         &None,
+        &None,
     );
     assert!(result.is_err());
 }
@@ -252,6 +258,7 @@ fn e2e_pause_blocks_file_claim() {
         &1_000_000,
         &token,
         &None,
+        &None,
     );
 
     // Pause
@@ -259,8 +266,8 @@ fn e2e_pause_blocks_file_claim() {
 
     // File claim should fail
     let details = String::from_str(&env, "Test");
-    let urls = vec![&env];
-    let result = client.try_file_claim(&holder, &policy.policy_id, &50_000, &details, &urls);
+    let ev = common::empty_evidence(&env);
+    let result = client.try_file_claim(&holder, &policy.policy_id, &50_000, &details, &ev);
     assert!(result.is_err());
 }
 
@@ -283,11 +290,12 @@ fn e2e_pause_blocks_vote() {
         &1_000_000,
         &token,
         &None,
+        &None,
     );
 
     let details = String::from_str(&env, "Test");
-    let urls = vec![&env];
-    let claim_id = client.file_claim(&holder, &policy.policy_id, &50_000, &details, &urls);
+    let ev = common::empty_evidence(&env);
+    let claim_id = client.file_claim(&holder, &policy.policy_id, &50_000, &details, &ev);
 
     // Pause
     client.pause(&admin, &0);
@@ -321,6 +329,7 @@ fn e2e_unpause_restores_operations() {
         &1_000_000,
         &token,
         &None,
+        &None,
     );
     assert!(policy.is_active);
 }
@@ -348,11 +357,12 @@ fn e2e_pause_allows_payout() {
         &1_000_000,
         &token,
         &None,
+        &None,
     );
 
     let details = String::from_str(&env, "Test");
-    let urls = vec![&env];
-    let claim_id = client.file_claim(&holder, &policy.policy_id, &50_000, &details, &urls);
+    let ev = common::empty_evidence(&env);
+    let claim_id = client.file_claim(&holder, &policy.policy_id, &50_000, &details, &ev);
 
     client.vote_on_claim(&voter1, &claim_id, &VoteOption::Approve);
     client.vote_on_claim(&voter2, &claim_id, &VoteOption::Approve);
@@ -388,6 +398,7 @@ fn e2e_bind_pause_allows_claims() {
         &1_000_000,
         &token,
         &None,
+        &None,
     );
 
     // Pause only binding
@@ -400,8 +411,8 @@ fn e2e_bind_pause_allows_claims() {
 
     // File claim should work
     let details = String::from_str(&env, "Test");
-    let urls = vec![&env];
-    let _result = client.try_file_claim(&holder, &1, &50_000, &details, &urls);
+    let ev = common::empty_evidence(&env);
+    let _result = client.try_file_claim(&holder, &1, &50_000, &details, &ev);
     // Note: This might still fail if claim validation fails, but not due to pause
 }
 
@@ -431,6 +442,7 @@ fn e2e_claims_pause_allows_binding() {
         &80,
         &1_000_000,
         &token,
+        &None,
         &None,
     );
     assert!(policy.is_active);
@@ -480,11 +492,12 @@ fn e2e_non_admin_cannot_process_claim() {
         &1_000_000,
         &token,
         &None,
+        &None,
     );
 
     let details = String::from_str(&env, "Test");
-    let urls = vec![&env];
-    let claim_id = client.file_claim(&holder, &policy.policy_id, &50_000, &details, &urls);
+    let ev = common::empty_evidence(&env);
+    let claim_id = client.file_claim(&holder, &policy.policy_id, &50_000, &details, &ev);
     client.vote_on_claim(&holder, &claim_id, &VoteOption::Approve);
 
     // Try to process as non-admin
@@ -511,17 +524,18 @@ fn e2e_claim_exceeds_coverage() {
         &100_000, // coverage
         &token,
         &None,
+        &None,
     );
 
     // Try to claim more than coverage
     let details = String::from_str(&env, "Test");
-    let urls = vec![&env];
+    let ev = common::empty_evidence(&env);
     let result = client.try_file_claim(
         &holder,
         &policy.policy_id,
         &200_000, // exceeds coverage!
         &details,
-        &urls,
+        &ev,
     );
     assert!(result.is_err());
 }
@@ -543,6 +557,7 @@ fn e2e_claim_on_inactive_policy() {
         &1_000_000,
         &token,
         &None,
+        &None,
     );
 
     // Terminate the policy (if terminate_policy exists)
@@ -554,8 +569,8 @@ fn e2e_claim_on_inactive_policy() {
     });
 
     let details = String::from_str(&env, "Test");
-    let urls = vec![&env];
-    let result = client.try_file_claim(&holder, &policy.policy_id, &50_000, &details, &urls);
+    let ev = common::empty_evidence(&env);
+    let result = client.try_file_claim(&holder, &policy.policy_id, &50_000, &details, &ev);
     assert!(result.is_err());
 }
 
@@ -587,11 +602,12 @@ fn e2e_double_vote_fails() {
         &1_000_000,
         &token,
         &None,
+        &None,
     );
 
     let details = String::from_str(&env, "Test");
-    let urls = vec![&env];
-    let claim_id = client.file_claim(&holder, &policy.policy_id, &50_000, &details, &urls);
+    let ev = common::empty_evidence(&env);
+    let claim_id = client.file_claim(&holder, &policy.policy_id, &50_000, &details, &ev);
 
     // Vote once
     client.vote_on_claim(&holder, &claim_id, &VoteOption::Approve);

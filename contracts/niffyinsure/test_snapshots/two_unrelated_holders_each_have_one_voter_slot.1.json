@@ -111,6 +111,12 @@
                     },
                     {
                       "key": {
+                        "symbol": "deductible"
+                      },
+                      "val": "void"
+                    },
+                    {
+                      "key": {
                         "symbol": "end_ledger"
                       },
                       "val": {
@@ -290,6 +296,12 @@
                       "val": {
                         "i128": "35000000"
                       }
+                    },
+                    {
+                      "key": {
+                        "symbol": "deductible"
+                      },
+                      "val": "void"
                     },
                     {
                       "key": {
@@ -656,12 +668,48 @@
                         "key": {
                           "vec": [
                             {
+                              "symbol": "RollingClaimCap"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "i128": "170141183460469231731687303715884105727"
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "RollingClaimWindowLedgers"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 1000000
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
                               "symbol": "Token"
                             }
                           ]
                         },
                         "val": {
                           "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "VoteDurLedgers"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 120960
                         }
                       },
                       {

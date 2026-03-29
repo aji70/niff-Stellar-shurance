@@ -1,6 +1,6 @@
 {
   "generators": {
-    "address": 5,
+    "address": 4,
     "nonce": 0,
     "mux_id": 0
   },
@@ -159,6 +159,14 @@
                     },
                     {
                       "key": {
+                        "symbol": "deductible"
+                      },
+                      "val": {
+                        "i128": "0"
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "details"
                       },
                       "val": {
@@ -167,18 +175,18 @@
                     },
                     {
                       "key": {
-                        "symbol": "filed_at"
+                        "symbol": "evidence"
                       },
                       "val": {
-                        "u32": 1
+                        "vec": []
                       }
                     },
                     {
                       "key": {
-                        "symbol": "image_urls"
+                        "symbol": "filed_at"
                       },
                       "val": {
-                        "vec": []
+                        "u32": 1
                       }
                     },
                     {
@@ -452,12 +460,48 @@
                         "key": {
                           "vec": [
                             {
+                              "symbol": "RollingClaimCap"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "i128": "170141183460469231731687303715884105727"
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "RollingClaimWindowLedgers"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 1000000
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
                               "symbol": "Token"
                             }
                           ]
                         },
                         "val": {
                           "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "VoteDurLedgers"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 120960
                         }
                       }
                     ]
