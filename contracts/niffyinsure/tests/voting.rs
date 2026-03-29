@@ -15,13 +15,15 @@
 
 #![cfg(test)]
 
+mod common;
+
 use niffyinsure::{
     types::{ClaimStatus, VoteOption, VOTE_WINDOW_LEDGERS},
     NiffyInsureClient,
 };
 use soroban_sdk::{
     testutils::{Address as _, Events, Ledger},
-    vec, Address, Env, String,
+    Address, Env, String,
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -45,8 +47,8 @@ fn seed(client: &NiffyInsureClient, holder: &Address, coverage: i128, end_ledger
 
 fn file(client: &NiffyInsureClient, holder: &Address, amount: i128, env: &Env) -> u64 {
     let details = String::from_str(env, "test claim");
-    let urls = vec![env];
-    client.file_claim(holder, &1u32, &amount, &details, &urls)
+    let ev = common::empty_evidence(env);
+    client.file_claim(holder, &1u32, &amount, &details, &ev)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -139,8 +141,10 @@ fn majority_reject_auto_finalizes_claim() {
 }
 
 #[test]
-fn finalize_after_deadline_plurality_approve() {
+fn finalize_after_deadline_rejects_when_participation_quorum_unmet() {
     let (env, client, _, _) = setup();
+    // All eligible voters must cast: 3 voters ⇒ R = 3 ballots.
+    client.admin_set_quorum_bps(&10_000u32);
     let v1 = Address::generate(&env);
     let v2 = Address::generate(&env);
     let v3 = Address::generate(&env);
@@ -148,13 +152,12 @@ fn finalize_after_deadline_plurality_approve() {
     seed(&client, &v2, 1_000_000, 500_000);
     seed(&client, &v3, 1_000_000, 500_000);
     let cid = file(&client, &v1, 100_000, &env);
-    // Only 1 approve — no majority (need 2/3)
+    // Single approve — cast count below R
     client.vote_on_claim(&v1, &cid, &VoteOption::Approve);
-    // Advance past deadline
     env.ledger()
         .with_mut(|l| l.sequence_number += VOTE_WINDOW_LEDGERS + 1);
     client.finalize_claim(&cid);
-    // Now terminal; further votes must fail
+    assert_eq!(client.get_claim(&cid).status, ClaimStatus::Rejected);
     assert!(client
         .try_vote_on_claim(&v2, &cid, &VoteOption::Reject)
         .is_err());
@@ -162,9 +165,9 @@ fn finalize_after_deadline_plurality_approve() {
 
 #[test]
 fn finalize_tie_resolves_to_rejected() {
-    // With participation quorum, a 1–1 tie is resolved as soon as the second ballot
-    // is cast (same outcome as post-deadline finalize plurality tie).
+    // Tie with full participation (2 of 2) → Rejected as soon as quorum is met
     let (env, client, _, _) = setup();
+    client.admin_set_quorum_bps(&10_000u32);
     let v1 = Address::generate(&env);
     let v2 = Address::generate(&env);
     let v3 = Address::generate(&env);

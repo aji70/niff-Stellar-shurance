@@ -8,22 +8,46 @@ A wallet becomes a **voter** automatically when it holds an active policy. Voter
 
 > **On-chain vs indexer:** The voter list is read directly from Soroban contract storage via RPC — not from the indexer database. The indexer only caches historical events for display speed; governance decisions always use on-chain reads.
 
+## Participation quorum and outcome (matches `niffyinsure` contract)
+
+Let:
+
+- **E** = number of **eligible** voters in the snapshot taken at `file_claim`.
+- **C** = **cast ballots** = approve_votes + reject_votes (each eligible address may cast at most once).
+- **Q** = **quorum_bps** for that claim (1–10,000), copied from instance storage at filing and stored per claim. Read it with `get_claim_quorum_bps(claim_id)`.
+
+**Required minimum cast votes:**
+
+```text
+R = ceil(E × Q ÷ 10_000)
+```
+
+(integer arithmetic on-chain: `(E * Q + 9_999) / 10_000`; if E = 0, R = 0).
+
+**Rules:**
+
+1. While **C < R**, the claim stays **Processing** (no early finality from quorum).
+2. When **C ≥ R**, the outcome is decided by **plurality** among cast votes: **Approved** if approve_votes > reject_votes; otherwise **Rejected** (reject wins ties).
+3. After the voting deadline, if **C < R**, the claim is **Rejected** (no quorum / insurer-favored default).
+
+**Admin tuning:** `admin_set_quorum_bps` updates instance **Q** for **future** filings only. Claims already in **Processing** keep the **Q** snapshot from their filing; changing Q does not retroactively change R for those claims. Updates emit **`quorum_updated`** (old_bps, new_bps) on-chain.
+
+Default **Q** after `initialize` is **5000** (50% participation), unless the admin sets another value.
+
 ## Vote Flow
 
 ```
-Claim filed
+Claim filed  →  snapshot E and quorum_bps = Q
      │
      ▼
-Voting window opens (per-claim deadline = `filed_at + voting_duration_ledgers`, default ~7 days)
+Voting window (per-claim deadline = filed_at + voting_duration_ledgers, default ~7 days)
      │
      ├─ Voter calls vote(claim_id, Approve | Reject)
      │   └─ Duplicate votes are rejected on-chain
      │
      ▼
-Quorum reached OR window expires
-     │
-     ├─ Majority Approve → payout released
-     └─ Majority Reject  → claim closed, no payout
+If C ≥ R  →  plurality decides (or wait until deadline to finalize)
+If C < R at deadline  →  Rejected (no quorum)
 ```
 
 ## Voting window configuration
@@ -37,7 +61,7 @@ The contract keeps **`voting_duration_ledgers`** in instance storage (admin-set,
 | One vote per voter per claim | Enforced by contract; duplicate reverts |
 | Non-voter cannot vote | `non_voter_cannot_vote` guard in contract |
 | Admin bypass | Admin may bypass the open-claim guard only when `force_admin_bypass = true` |
-| Quorum | Configurable threshold; see contract `admin.rs` |
+| Quorum | `quorum_bps` in instance storage; per-claim snapshot at filing; `admin_set_quorum_bps` + `QuorumUpdated` event |
 
 ## Verifying a Vote On-Chain
 

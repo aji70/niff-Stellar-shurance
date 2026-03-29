@@ -185,6 +185,22 @@ fn auth01_non_admin_cannot_drain() {
     assert!(client.try_drain(&recipient, &1_000_000i128).is_err());
 }
 
+#[test]
+fn auth01_non_admin_cannot_set_quorum_bps() {
+    let (env, client, _, _, rando) = make_non_admin_env();
+    env_with_single_auth(
+        &env,
+        &client.address,
+        &rando,
+        "admin_set_quorum_bps",
+        soroban_sdk::vec![
+            &env,
+            soroban_sdk::IntoVal::<Env, soroban_sdk::Val>::into_val(&2500u32, &env)
+        ],
+    );
+    assert!(client.try_admin_set_quorum_bps(&2500u32).is_err());
+}
+
 // ── AUTH-02: rotation hijack prevention ───────────────────────────────────────
 
 #[test]

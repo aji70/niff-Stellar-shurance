@@ -8,6 +8,8 @@ export interface ClaimFormData {
 export interface IpfsUploadResponse {
   cid: string;
   gatewayUrls: string[];
+  /** SHA-256 of uploaded bytes (hex); pass to `file_claim` as `contentSha256Hex`. */
+  contentSha256Hex: string;
   filename: string;
   size: number;
   mimeType: string;
@@ -54,7 +56,7 @@ export interface OnChainClaimSummary {
   claim_id: bigint;
   policy_id: number;
   amount: bigint;
-  /** 'Processing' | 'Pending' | 'Approved' | 'Paid' | 'Rejected' | 'UnderAppeal' | 'AppealApproved' | 'AppealRejected' */
+  /** 'Processing' | 'Pending' | 'Approved' | 'Paid' | 'Rejected' | 'Withdrawn' | … */
   status: string;
   filed_at: number;
   /** Last ledger where a vote may be cast (inclusive); frozen at filing time. */

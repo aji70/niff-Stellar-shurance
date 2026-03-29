@@ -53,11 +53,18 @@ export function VoteEducationPanel() {
           results in no payout and the associated policy is deactivated.
         </p>
         <p>
-          <strong>How is the outcome decided?</strong> A simple majority of
-          eligible voters determines the result. If more than half of eligible
-          voters approve, the claim is approved. If more than half reject, it is
-          rejected. If the voting window closes without a majority, the plurality
-          wins; ties resolve to rejected.
+          <strong>How is the outcome decided?</strong> The contract uses a{' '}
+          <strong>participation quorum</strong> plus <strong>plurality</strong>{' '}
+          among ballots actually cast. Let <em>E</em> be the number of eligible
+          voters in the snapshot, <em>C</em> = approve votes + reject votes, and{' '}
+          <em>Q</em> be this claim&apos;s quorum in basis points (1–10,000), fixed
+          when the claim was filed. Required cast ballots are{' '}
+          <code className="rounded bg-blue-200/60 px-1">R = ⌈E × Q ÷ 10,000⌉</code>
+          . The vote is valid only if <em>C ≥ R</em>. Then: if approve votes exceed
+          reject votes the claim is approved; otherwise it is rejected (including
+          ties). If the deadline passes with <em>C &lt; R</em>, the claim is
+          rejected for insufficient participation. Admin can adjust <em>Q</em> for
+          new claims only; it does not change mid-flight for claims already open.
         </p>
         <p>
           <strong>Voting deadline.</strong> Votes are accepted for approximately
@@ -67,6 +74,12 @@ export function VoteEducationPanel() {
         <p>
           <strong>Your vote is final.</strong> Once submitted and confirmed
           on-chain, votes cannot be changed or retracted.
+        </p>
+        <p>
+          <strong>Claimant withdrawal.</strong> Before any vote is cast, the
+          claimant can withdraw the claim on-chain. After the first vote,
+          withdrawal is disabled. Withdrawn claims stay visible for audit and
+          do not receive payout.
         </p>
         <p>
           <strong>No governance token.</strong> Voting power comes solely from

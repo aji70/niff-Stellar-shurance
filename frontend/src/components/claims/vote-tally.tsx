@@ -4,7 +4,15 @@ import { useEffect, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Claim, ClaimStatus, deadlineMs, isTerminal, isVoteOpen } from '@/lib/schemas/vote'
+import {
+  Claim,
+  ClaimStatus,
+  DEFAULT_QUORUM_BPS,
+  deadlineMs,
+  isTerminal,
+  isVoteOpen,
+  requiredBallotsForQuorum,
+} from '@/lib/schemas/vote'
 
 interface VoteTallyProps {
   claim: Claim
@@ -18,6 +26,7 @@ const STATUS_LABELS: Record<ClaimStatus, string> = {
   Approved: 'Approved',
   Paid: 'Paid out',
   Rejected: 'Rejected',
+  Withdrawn: 'Withdrawn by claimant',
 }
 
 const STATUS_VARIANT: Record<
@@ -29,6 +38,7 @@ const STATUS_VARIANT: Record<
   Approved: 'success',
   Paid: 'success',
   Rejected: 'destructive',
+  Withdrawn: 'secondary',
 }
 
 function useCountdown(targetMs: number) {
@@ -58,7 +68,8 @@ export function VoteTally({ claim, currentLedger, loading }: VoteTallyProps) {
   const castCount = approveCount + rejectCount
   const approvePct = total > 0 ? Math.round((approveCount / total) * 100) : 0
   const rejectPct = total > 0 ? Math.round((rejectCount / total) * 100) : 0
-  const majority = Math.floor(total / 2) + 1
+  const quorumBps = claim.quorum_bps ?? DEFAULT_QUORUM_BPS
+  const requiredCast = requiredBallotsForQuorum(total, quorumBps)
 
   const voteOpen = isVoteOpen(claim.voting_deadline_ledger, currentLedger)
   const terminal = isTerminal(claim.status)
@@ -110,8 +121,9 @@ export function VoteTally({ claim, currentLedger, loading }: VoteTallyProps) {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        {castCount} of {total} eligible voters have voted. Majority threshold:{' '}
-        {majority} votes.
+        {castCount} of {total} eligible voters have cast a ballot. Participation quorum: at least{' '}
+        {requiredCast} cast vote{requiredCast === 1 ? '' : 's'} (ceil(eligible × {quorumBps} ÷
+        10,000) bps). Once quorum is met, the side with more approve vs reject votes wins; ties reject.
       </p>
 
       {/* Deadline */}

@@ -5,16 +5,11 @@ import { RpcModule } from '../rpc/rpc.module';
 import { AuditService } from '../admin/audit.service';
 import { WasmDriftService } from './wasm-drift.service';
 import { PrivacyService } from './privacy.service';
-import { SolvencyMonitoringService } from './solvency-monitoring.service';
+import { DataRetentionService } from './data-retention.service';
 
 @Module({
-  imports: [ScheduleModule.forRoot(), PrismaModule, RpcModule],
-  providers: [
-    AuditService,
-    WasmDriftService,
-    PrivacyService,
-    SolvencyMonitoringService,
-  ],
-  exports: [PrivacyService, SolvencyMonitoringService],
+  imports: [ScheduleModule.forRoot(), PrismaModule],
+  providers: [AuditService, WasmDriftService, PrivacyService, DataRetentionService],
+  exports: [PrivacyService],
 })
 export class MaintenanceModule {}
