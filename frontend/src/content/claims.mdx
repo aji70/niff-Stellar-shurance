@@ -27,8 +27,8 @@ T+72h  Payout transaction submitted (Approve) OR claim marked Rejected
 | State | Meaning |
 |-------|---------|
 | `Open` | Filed, voting in progress |
-| `Approved` | Quorum voted Approve; payout pending or complete |
-| `Rejected` | Quorum voted Reject or window expired with no quorum |
+| `Approved` | Participation quorum met and approve votes outnumber reject; payout pending or complete |
+| `Rejected` | Participation quorum met with reject or tie; or window ended with insufficient ballots cast |
 
 ## Rate Limiting
 

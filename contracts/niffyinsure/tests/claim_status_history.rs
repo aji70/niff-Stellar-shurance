@@ -156,11 +156,14 @@ fn status_history_finalize_reject_sequence() {
         &None,
     );
 
+    // 100% participation required so a 1–1 split does not auto-finalize before the deadline.
+    client.admin_set_quorum_bps(&10_000u32);
+
     let details = String::from_str(&env, "reject path");
     let ev = common::empty_evidence(&env);
     let claim_id = client.file_claim(&holder, &policy.policy_id, &50_000, &details, &ev);
 
-    // Split vote — no majority until deadline
+    // Split vote — quorum not met until deadline
     client.vote_on_claim(&voter1, &claim_id, &VoteOption::Approve);
     client.vote_on_claim(&voter2, &claim_id, &VoteOption::Reject);
 

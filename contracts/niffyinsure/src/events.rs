@@ -62,6 +62,10 @@
 //! ```
 //! - `allowed`: 1 = added to allowlist, 0 = removed
 //!
+//! ### quorum_updated — (contract `niffyinsure` topic namespace)
+//! On-chain topics: `["niffyinsure", "quorum_updated"]` with payload `{ old_bps, new_bps }`.
+//! Emitted by `admin_set_quorum_bps`. Does not alter `quorum_bps` already snapshotted on open claims.
+//!
 //! ### adm_prop — AdminProposedData
 //! topics: ("niffyins", "adm_prop", old_admin: Address, new_admin: Address)
 //! ```json

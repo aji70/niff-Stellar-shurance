@@ -88,6 +88,50 @@ fn push_status_transition(
     }
 }
 
+// ── Participation quorum (see also `types` lifecycle docs) ───────────────────
+//
+// Let `E` = eligible voters (snapshot length at `file_claim`), `C` = cast ballots =
+// `approve_votes + reject_votes`, `Q` = quorum basis points **for this claim**
+// (instance `quorum_bps` copied into persistent `ClaimQuorumBps(claim_id)` at filing).
+// Admin changes to instance `quorum_bps` do **not** alter `Q` for claims already in
+// `Processing`.
+//
+// Required minimum cast votes:
+//   R = ceil(E * Q / 10_000)  →  R = (E * Q + 9_999) / 10_000  (u32; E = 0 ⇒ R = 0)
+//
+// **Quorum met** iff `C >= R`. If met, outcome is **plurality**: Approved when
+// `approve_votes > reject_votes`, else Rejected (insurer wins ties).
+// If the voting deadline passes with `C < R`, the claim is **Rejected** (no quorum).
+fn required_cast_for_quorum(eligible: u32, quorum_bps: u32) -> u32 {
+    if eligible == 0 {
+        return 0;
+    }
+    let numer = (eligible as u64).saturating_mul(quorum_bps as u64);
+    numer.div_ceil(10_000) as u32
+}
+
+fn participation_quorum_met(cast_votes: u32, eligible: u32, quorum_bps: u32) -> bool {
+    cast_votes >= required_cast_for_quorum(eligible, quorum_bps)
+}
+
+/// If participation quorum is satisfied, returns Some(Approved|Rejected) by plurality.
+fn resolve_plurality_if_quorum_met(
+    approve_votes: u32,
+    reject_votes: u32,
+    cast_votes: u32,
+    eligible: u32,
+    quorum_bps: u32,
+) -> Option<ClaimStatus> {
+    if !participation_quorum_met(cast_votes, eligible, quorum_bps) {
+        return None;
+    }
+    if approve_votes > reject_votes {
+        Some(ClaimStatus::Approved)
+    } else {
+        Some(ClaimStatus::Rejected)
+    }
+}
+
 // ── Events ────────────────────────────────────────────────────────────────────
 
 #[contractevent(topics = ["niffyinsure", "claim_filed"])]
@@ -259,6 +303,7 @@ pub fn file_claim(
     storage::set_claim(env, &claim);
     storage::set_open_claim(env, holder, policy_id, true);
     storage::snapshot_claim_voters(env, claim_id);
+    storage::set_claim_quorum_bps(env, claim_id, storage::get_quorum_bps(env));
     storage::set_last_claim_ledger(env, holder, now);
 
     let mut evidence_hashes: Vec<BytesN<32>> = Vec::new(env);
@@ -331,14 +376,21 @@ pub fn vote_on_claim(
         VoteOption::Reject => claim.reject_votes += 1,
     }
 
-    // Auto-finalize on majority.
-    let total = snapshot.len();
-    let majority = total / 2 + 1;
-    if claim.approve_votes >= majority {
-        claim.status = ClaimStatus::Approved;
-    } else if claim.reject_votes >= majority {
-        claim.status = ClaimStatus::Rejected;
-        claim.appeal_open_deadline_ledger = now.saturating_add(ledger::APPEAL_OPEN_WINDOW_LEDGERS);
+    let eligible = snapshot.len() as u32;
+    let cast = claim.approve_votes + claim.reject_votes;
+    let quorum_bps = storage::get_claim_quorum_bps(env, claim_id);
+    if let Some(res) = resolve_plurality_if_quorum_met(
+        claim.approve_votes,
+        claim.reject_votes,
+        cast,
+        eligible,
+        quorum_bps,
+    ) {
+        let rejected = res == ClaimStatus::Rejected;
+        claim.status = res;
+        if rejected {
+            claim.appeal_open_deadline_ledger = now.saturating_add(ledger::APPEAL_OPEN_WINDOW_LEDGERS);
+        }
     }
 
     if claim.status != status_before {
@@ -380,7 +432,8 @@ pub fn refresh_snapshot(env: &Env, claim_id: u64) -> Result<(), Error> {
 /// Finalize a claim after the voting deadline has passed.
 ///
 /// Window check: `now > claim.voting_deadline_ledger` (see `ledger::is_claim_past_voting_deadline`).
-/// Plurality wins; tie resolves to Rejected.
+/// Uses the **participation quorum** and per-claim `quorum_bps` snapshot (see module helpers).
+/// If quorum is met, plurality decides; if not, **Rejected** (no quorum).
 pub fn finalize_claim(env: &Env, claim_id: u64) -> Result<ClaimStatus, Error> {
     // Check pause: finalization is blocked if claims_paused is true
     storage::assert_claims_not_paused(env);
@@ -398,10 +451,20 @@ pub fn finalize_claim(env: &Env, claim_id: u64) -> Result<ClaimStatus, Error> {
 
     let status_before = claim.status.clone();
 
-    if claim.approve_votes > claim.reject_votes {
-        claim.status = ClaimStatus::Approved;
+    let voters = storage::get_claim_voters(env, claim_id);
+    let eligible = voters.len() as u32;
+    let cast = claim.approve_votes + claim.reject_votes;
+    let quorum_bps = storage::get_claim_quorum_bps(env, claim_id);
+
+    if participation_quorum_met(cast, eligible, quorum_bps) {
+        if claim.approve_votes > claim.reject_votes {
+            claim.status = ClaimStatus::Approved;
+        } else {
+            claim.status = ClaimStatus::Rejected;
+            claim.appeal_open_deadline_ledger = now.saturating_add(ledger::APPEAL_OPEN_WINDOW_LEDGERS);
+        }
     } else {
-        // Tie or reject plurality → Rejected (insurer wins tie).
+        // Below minimum participation — no quorum (insurer-favored default).
         claim.status = ClaimStatus::Rejected;
         claim.appeal_open_deadline_ledger = now.saturating_add(ledger::APPEAL_OPEN_WINDOW_LEDGERS);
     }

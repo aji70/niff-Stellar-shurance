@@ -188,11 +188,14 @@ fn e2e_finalize_after_deadline() {
     );
     let policy_id = policy.policy_id;
 
+    // Require all eligible voters to cast before quorum counts (so one ballot stays Processing).
+    client.admin_set_quorum_bps(&10_000u32);
+
     let details = String::from_str(&env, "Claim for review");
     let ev = common::empty_evidence(&env);
     let claim_id = client.file_claim(&holder, &policy_id, &100_000, &details, &ev);
 
-    // Vote once (not enough for majority)
+    // Vote once — participation quorum not satisfied yet
     client.vote_on_claim(&voter1, &claim_id, &VoteOption::Approve);
 
     let claim = client.get_claim(&claim_id);
@@ -205,9 +208,9 @@ fn e2e_finalize_after_deadline() {
     // Finalize after deadline
     client.finalize_claim(&claim_id);
 
-    // Verify claim is Rejected (tie/partial = reject)
+    // Below required participation at deadline → no quorum → Rejected
     let claim = client.get_claim(&claim_id);
-    assert!(claim.status == ClaimStatus::Rejected || claim.status == ClaimStatus::Approved);
+    assert_eq!(claim.status, ClaimStatus::Rejected);
 }
 
 // ── Pause Behavior Tests ───────────────────────────────────────────────────────

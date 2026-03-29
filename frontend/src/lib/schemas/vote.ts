@@ -32,6 +32,8 @@ export const ClaimSchema = z.object({
   reject_votes: z.number(),
   filed_at: z.number(),
   total_voters: z.number(),
+  /** Per-claim snapshot from contract `get_claim_quorum_bps`; omit ⇒ use DEFAULT_QUORUM_BPS for display. */
+  quorum_bps: z.number().int().min(1).max(10_000).optional(),
 })
 export type Claim = z.infer<typeof ClaimSchema>
 
@@ -61,6 +63,20 @@ export type Eligibility = z.infer<typeof EligibilitySchema>
 // 1 ledger ≈ 5 s → 7 days ≈ 120_960 ledgers
 export const VOTE_WINDOW_LEDGERS = 120_960
 export const SECS_PER_LEDGER = 5
+
+/** Default 50% participation; must match `types::DEFAULT_QUORUM_BPS` on-chain. */
+export const DEFAULT_QUORUM_BPS = 5000
+export const QUORUM_BPS_DENOMINATOR = 10_000
+
+/**
+ * Minimum cast ballots (approve + reject) required before an outcome is valid.
+ * Matches on-chain `required_cast_for_quorum`: ceil(eligible * quorumBps / 10_000).
+ */
+export function requiredBallotsForQuorum(eligible: number, quorumBps: number): number {
+  if (eligible <= 0) return 0
+  const n = eligible * quorumBps
+  return Math.ceil(n / QUORUM_BPS_DENOMINATOR)
+}
 
 export function ledgersToMs(ledgers: number): number {
   return ledgers * SECS_PER_LEDGER * 1000

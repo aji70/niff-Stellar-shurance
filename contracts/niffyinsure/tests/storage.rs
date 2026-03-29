@@ -269,6 +269,7 @@ fn full_claim_vote_flow_approve() {
     let contract_id = env.register(niffyinsure::NiffyInsure, ());
     let client = NiffyInsureClient::new(&env, &contract_id);
     client.initialize(&admin, &token_addr);
+    client.admin_set_quorum_bps(&10_000u32);
 
     // Mint enough tokens into the contract so it can pay out.
     token_client.mint(&contract_id, &200_000_000i128);
@@ -294,11 +295,11 @@ fn full_claim_vote_flow_approve() {
     assert_eq!(claim_id, 1u64);
     assert_eq!(client.get_claim_counter(), 1u64);
 
-    // 1 of 2 votes — not yet majority
+    // 1 of 2 votes — participation quorum not met
     let s1 = client.vote_on_claim(&holder, &claim_id, &VoteOption::Approve);
     assert_eq!(s1, ClaimStatus::Processing);
 
-    // 2 of 2 votes — majority reached → Approved
+    // 2 of 2 votes — quorum + unanimous approve → Approved
     let s2 = client.vote_on_claim(&voter2, &claim_id, &VoteOption::Approve);
     assert_eq!(s2, ClaimStatus::Approved);
 
@@ -316,6 +317,7 @@ fn full_claim_vote_flow_approve() {
 fn full_claim_vote_flow_reject() {
     let (env, contract_id, _, token) = setup();
     let client = NiffyInsureClient::new(&env, &contract_id);
+    client.admin_set_quorum_bps(&10_000u32);
     let holder = Address::generate(&env);
     let voter2 = Address::generate(&env);
 

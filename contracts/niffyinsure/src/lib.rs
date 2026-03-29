@@ -51,6 +51,13 @@ struct VotingDurationUpdated {
     pub new_ledgers: u32,
 }
 
+#[contractevent(topics = ["niffyinsure", "quorum_updated"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct QuorumUpdated {
+    pub old_bps: u32,
+    pub new_bps: u32,
+}
+
 #[contractevent(topics = ["niffyinsure", "pause_toggled"])]
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct PauseToggled {
@@ -77,6 +84,7 @@ impl NiffyInsure {
         storage::set_multiplier_table(&env, &premium::default_multiplier_table(&env));
         storage::set_allowed_asset(&env, &token, true);
         storage::set_voting_duration_ledgers(&env, ledger::VOTE_WINDOW_LEDGERS);
+        storage::set_quorum_bps(&env, types::DEFAULT_QUORUM_BPS);
         Ok(())
     }
 
@@ -230,6 +238,31 @@ impl NiffyInsure {
         admin.require_auth();
         ledger::validate_voting_duration_ledgers(ledgers)?;
         storage::set_voting_duration_ledgers(&env, ledgers);
+        Ok(())
+    }
+
+    /// Participation quorum in basis points (1–10_000). Applies to **new** claims only;
+    /// each claim stores a snapshot at `file_claim` so `Processing` claims keep their `quorum_bps`.
+    pub fn get_quorum_bps(env: Env) -> u32 {
+        storage::get_quorum_bps(&env)
+    }
+
+    /// Basis points snapshot for this claim (immutable after filing).
+    pub fn get_claim_quorum_bps(env: Env, claim_id: u64) -> u32 {
+        storage::get_claim_quorum_bps(&env, claim_id)
+    }
+
+    pub fn admin_set_quorum_bps(env: Env, quorum_bps: u32) -> Result<(), validate::Error> {
+        let admin = storage::get_admin(&env);
+        admin.require_auth();
+        validate::validate_quorum_bps(quorum_bps)?;
+        let old = storage::get_quorum_bps(&env);
+        storage::set_quorum_bps(&env, quorum_bps);
+        QuorumUpdated {
+            old_bps: old,
+            new_bps: quorum_bps,
+        }
+        .publish(&env);
         Ok(())
     }
 

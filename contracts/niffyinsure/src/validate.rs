@@ -62,6 +62,15 @@ pub enum Error {
     VoterSnapshotExpired = 51,
 }
 
+pub fn validate_quorum_bps(bps: u32) -> Result<(), Error> {
+    use crate::types::{QUORUM_BPS_MAX, QUORUM_BPS_MIN};
+    if !(QUORUM_BPS_MIN..=QUORUM_BPS_MAX).contains(&bps) {
+        // Reuse bounded-config error code (Soroban `contracterror` caps variant count).
+        return Err(Error::VotingDurationOutOfBounds);
+    }
+    Ok(())
+}
+
 pub fn check_policy(policy: &Policy) -> Result<(), Error> {
     if policy.coverage <= 0 {
         return Err(Error::ZeroCoverage);
