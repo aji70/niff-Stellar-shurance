@@ -37,6 +37,14 @@ export class MetricsService implements OnModuleInit {
   /** result: hit | miss | bypass — quote simulation Redis cache */
   readonly quoteSimulationCacheTotal: client.Counter<string>;
 
+  // ── DB pool metrics ───────────────────────────────────────────────────────
+  /** Number of connections currently executing a query. */
+  readonly dbPoolActive: client.Gauge<string>;
+  /** Number of idle connections in the pool. */
+  readonly dbPoolIdle: client.Gauge<string>;
+  /** Number of requests waiting for a free connection. */
+  readonly dbPoolWaiting: client.Gauge<string>;
+
   constructor() {
     this.registry = new client.Registry();
     this.registry.setDefaultLabels({ app: 'niffyinsure-api' });
@@ -109,6 +117,24 @@ export class MetricsService implements OnModuleInit {
       labelNames: ['result'],
       registers: [this.registry],
     });
+
+    this.dbPoolActive = new client.Gauge({
+      name: 'db_pool_active',
+      help: 'Number of DB connections currently executing a query',
+      registers: [this.registry],
+    });
+
+    this.dbPoolIdle = new client.Gauge({
+      name: 'db_pool_idle',
+      help: 'Number of idle DB connections in the pool',
+      registers: [this.registry],
+    });
+
+    this.dbPoolWaiting = new client.Gauge({
+      name: 'db_pool_waiting',
+      help: 'Number of requests waiting for a free DB connection',
+      registers: [this.registry],
+    });
   }
 
   onModuleInit() {
@@ -165,6 +191,12 @@ export class MetricsService implements OnModuleInit {
 
   recordQuoteSimulationCache(result: 'hit' | 'miss' | 'bypass') {
     this.quoteSimulationCacheTotal.inc({ result });
+  }
+
+  recordDbPool(opts: { active: number; idle: number; waiting: number }) {
+    this.dbPoolActive.set(opts.active);
+    this.dbPoolIdle.set(opts.idle);
+    this.dbPoolWaiting.set(opts.waiting);
   }
 
   async getMetrics(): Promise<string> {

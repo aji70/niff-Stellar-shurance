@@ -151,4 +151,13 @@ export const validationSchema = Joi.object({
     .description(
       "Days to retain soft-deleted policies/claims/votes before hard-delete (raw_events untouched)",
     ),
+  // DB connection pool (Prisma)
+  DB_POOL_MAX: Joi.number().integer().min(1).default(10)
+    .description('Max DB connections in the pool'),
+  DB_POOL_MIN: Joi.number().integer().min(0).default(2)
+    .description('Min warm DB connections'),
+  DB_POOL_IDLE_TIMEOUT_MS: Joi.number().integer().min(1000).default(30_000)
+    .description('Idle connection reclaim timeout (ms)'),
+  DB_POOL_CONNECTION_TIMEOUT_MS: Joi.number().integer().min(500).default(5_000)
+    .description('Max wait for a free connection before failing (ms)'),
 });

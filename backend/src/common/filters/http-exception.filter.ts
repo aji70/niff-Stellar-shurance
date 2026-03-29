@@ -7,11 +7,11 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { ValidationError } from 'class-validator';
+import { AppException, getCatalogEntry } from '../errors';
 
 /**
- * Maps Stellar / Soroban error strings to stable API error codes.
- * Keeps raw blockchain internals out of client-facing responses.
+ * Maps raw Stellar / Soroban error strings to catalog codes.
+ * Keeps blockchain internals out of client-facing responses.
  */
 const STELLAR_ERROR_MAP: Record<string, string> = {
   tx_failed: 'TRANSACTION_FAILED',
@@ -41,23 +41,58 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request & { requestId?: string }>();
 
+    // ── Resolve status ────────────────────────────────────────────────────
     const status =
       exception instanceof HttpException
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
+    // ── Resolve error code ────────────────────────────────────────────────
+    let errorCode: string | undefined;
+    let i18nKey: string | undefined;
+
+    if (exception instanceof AppException) {
+      // Catalog-backed exception — code and i18nKey are authoritative.
+      errorCode = exception.errorCode;
+      i18nKey = getCatalogEntry(errorCode)?.i18nKey;
+    } else if (exception instanceof HttpException) {
+      // Legacy HttpException: check if the response body carries a known code.
+      const body = exception.getResponse();
+      const bodyCode =
+        typeof body === 'object' && body !== null
+          ? (body as Record<string, unknown>).error
+          : undefined;
+      if (typeof bodyCode === 'string') {
+        const entry = getCatalogEntry(bodyCode);
+        if (entry) {
+          errorCode = entry.code;
+          i18nKey = entry.i18nKey;
+        } else {
+          errorCode = bodyCode;
+        }
+      }
+    } else if (exception instanceof Error) {
+      // Unknown error: try to map Stellar error strings.
+      const stellarCode = normalizeStellarError(exception.message);
+      if (stellarCode) {
+        const entry = getCatalogEntry(stellarCode);
+        errorCode = stellarCode;
+        i18nKey = entry?.i18nKey;
+      }
+    }
+
+    // ── Resolve message ───────────────────────────────────────────────────
     const rawResponse =
       exception instanceof HttpException
         ? exception.getResponse()
         : 'Internal server error';
 
-    // Normalize Stellar error codes when present
-    let errorCode: string | undefined;
-    if (exception instanceof Error) {
-      errorCode = normalizeStellarError(exception.message);
-    }
+    const message =
+      typeof rawResponse === 'string'
+        ? rawResponse
+        : (rawResponse as Record<string, unknown>).message ?? rawResponse;
 
-    // Log 5xx errors with stack trace; 4xx are client errors — debug level
+    // ── Logging ───────────────────────────────────────────────────────────
     if (status >= 500) {
       this.logger.error(
         `${request.method} ${request.url} → ${status}`,
@@ -71,12 +106,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       statusCode: status,
       timestamp: new Date().toISOString(),
       path: request.url,
-      requestId: request.requestId, // correlation ID for support escalation
+      requestId: request.requestId,
       ...(errorCode ? { error: errorCode } : {}),
-      message:
-        typeof rawResponse === 'string'
-          ? rawResponse
-          : (rawResponse as Record<string, unknown>).message ?? rawResponse,
+      ...(i18nKey ? { i18nKey } : {}),
+      message,
     });
   }
 }
