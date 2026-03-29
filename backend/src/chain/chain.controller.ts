@@ -1,5 +1,5 @@
-import { Body, Controller, HttpCode, Post } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, HttpCode, Post, Query } from '@nestjs/common';
+import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { SorobanService } from '../rpc/soroban.service';
 import { GetPoliciesBatchDto } from './dto/get-policies-batch.dto';
 
@@ -23,5 +23,33 @@ export class ChainController {
       sourceAccount: dto.source_account,
     });
     return { results };
+  }
+
+  /**
+   * GET /chain/treasury-balance
+   *
+   * Returns the contract's own premium-token balance in minor units (stroops).
+   * Callable without authentication — read-only simulation, no state mutation.
+   *
+   * Decimal interpretation: 1 XLM = 10_000_000 stroops (7 decimal places).
+   * For multi-asset deployments, this reflects the DEFAULT_TOKEN_CONTRACT_ID balance.
+   * Per-asset variants should be added here when multi-asset is enabled.
+   */
+  @Get('treasury-balance')
+  @ApiOperation({
+    summary: 'Get contract treasury balance (minor units)',
+    description:
+      'Simulates get_treasury_balance() on-chain. Returns raw stroops; divide by 10^7 for XLM. ' +
+      'No authentication required. Does not mutate state.',
+  })
+  @ApiQuery({
+    name: 'source_account',
+    required: true,
+    description: 'Stellar public key used as the simulation source account.',
+  })
+  async getTreasuryBalance(
+    @Query('source_account') sourceAccount: string,
+  ): Promise<{ balanceStroops: string; minResourceFee: string }> {
+    return this.soroban.simulateGetTreasuryBalance({ sourceAccount });
   }
 }

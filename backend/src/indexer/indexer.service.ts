@@ -4,6 +4,11 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SorobanService } from '../rpc/soroban.service';
 import { parseEvent } from '../events/events.schema';
+import {
+  selectParser,
+  initDeploymentRegistry,
+  isWarningRow,
+} from '../events/parser-registry';
 import { rpc as SorobanRpc, scValToNative } from '@stellar/stellar-sdk';
 import { tryNormalizeAddress } from '../common/utils/normalize-address';
 
@@ -89,6 +94,15 @@ export class IndexerService {
     this.networkId = this.config.get<string>('STELLAR_NETWORK', 'testnet');
     this.gapThresholdLedgers = this.config.get<number>('INDEXER_GAP_ALERT_THRESHOLD_LEDGERS', 100);
     this.gapCooldownMs = this.config.get<number>('INDEXER_GAP_ALERT_COOLDOWN_MS', 3_600_000);
+
+    // Bootstrap parser registry from env. Extend DEPLOYMENT_REGISTRY entries
+    // when a new contract version is deployed (add fromLedger of the upgrade ledger).
+    const contractId = this.config.get<string>('CONTRACT_ID', '');
+    if (contractId) {
+      initDeploymentRegistry([
+        { contractId, schemaVersion: 1, fromLedger: 0 },
+      ]);
+    }
   }
 
   /** Bull reindex job: drain backlog for a network after cursor reset. */
@@ -264,6 +278,24 @@ export class IndexerService {
         update: {},
       });
 
+      // Use the versioned parser registry for deterministic event routing.
+      const parser = selectParser(contractId, event.ledger);
+      const parsed = parser.parse(topics, dataNative, event.ledger, txHash);
+
+      if (isWarningRow(parsed)) {
+        this.logger.warn(
+          JSON.stringify({
+            event: 'unknown_event_schema',
+            contractId: parsed.contractId,
+            ledger: parsed.ledger,
+            txHash: parsed.txHash,
+            reason: parsed.reason,
+          }),
+        );
+        await this.advanceCursorInTx(tx, network, event.ledger);
+        return;
+      }
+
       const mainTopic = topics[0]?.toString();
       const subTopic = topics[1]?.toString();
 
@@ -288,7 +320,10 @@ export class IndexerService {
       await this.advanceCursorInTx(tx, network, event.ledger);
     });
 
-    if (parsed?.key === 'niffyins:tbl_upd') {
+    // Use registry-parsed key for post-tx side effects.
+    const parser = selectParser(contractId, event.ledger);
+    const parsedForSideEffects = parser.parse(topics, dataNative, event.ledger, txHash);
+    if (!isWarningRow(parsedForSideEffects) && parsedForSideEffects.key === 'niffyins:tbl_upd') {
       await this.quoteSimulationCache.invalidateAll();
     }
   }

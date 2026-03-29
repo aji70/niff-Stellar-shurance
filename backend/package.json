@@ -29,7 +29,9 @@
     "migration:run": "typeorm-ts-node-commonjs migration:run -- -d src/config/database.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -- -d src/config/database.ts",
     "seed": "ts-node src/database/seed.ts",
-    "db:reset": "docker-compose down -v && docker-compose up -d"
+    "db:reset": "docker-compose down -v && docker-compose up -d",
+    "error-catalog:check": "ts-node scripts/check-error-codes.ts",
+    "error-catalog:export": "ts-node scripts/export-error-catalog.ts"
   },
   "dependencies": {
     "@bull-board/api": "^6.20.6",
