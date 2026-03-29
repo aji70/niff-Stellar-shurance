@@ -15,7 +15,7 @@ import { AuthIdentityService } from './auth-identity.service';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: '7d' },
+        signOptions: { expiresIn: configService.get<string>('JWT_EXPIRES_IN', '7d') },
       }),
       inject: [ConfigService],
     }),

@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SorobanService } from '../rpc/soroban.service';
 import { RedisService } from '../cache/redis.service';
+import { getRuntimeEnv } from '../config/runtime-env';
 import {
   SOLVENCY_SNAPSHOT_REDIS_KEY,
   SOLVENCY_SNAPSHOT_TTL_SECONDS,
@@ -40,7 +41,7 @@ export class SolvencyMonitoringService {
     return this.redis.get<SolvencySnapshot>(SOLVENCY_SNAPSHOT_REDIS_KEY);
   }
 
-  @Cron(process.env.SOLVENCY_CRON_EXPRESSION || '0 */15 * * * *')
+  @Cron(getRuntimeEnv().SOLVENCY_CRON_EXPRESSION)
   async runScheduledSolvencyCheck(): Promise<void> {
     await this.runSolvencyCheck();
   }
