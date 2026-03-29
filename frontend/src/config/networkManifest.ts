@@ -52,7 +52,21 @@ export function getManifest(network: AppNetwork): NetworkManifest {
   return NETWORK_MANIFESTS[network]
 }
 
-/** Maps a wallet-reported network passphrase to our AppNetwork key. */
+/**
+ * Maps the exact network passphrase string returned by the wallet (via
+ * `StellarWalletsKit.getNetwork()`) to our `AppNetwork` key.
+ *
+ * Comparison is **case-sensitive, full-string equality** against each manifest’s
+ * `networkPassphrase` (Stellar’s canonical strings, e.g. Test SDF Network).
+ *
+ * **Custom RPC:** Changing the Soroban/Horizon RPC in Settings does not change
+ * the wallet passphrase; mismatch detection is driven only by what the wallet
+ * reports for the active network.
+ *
+ * **Unknown / private networks:** If the passphrase is not one of our three
+ * manifests, this returns `null`. Callers should treat that as “wallet network
+ * not supported by this app” (see `computeNetworkMismatch` in wallet utils).
+ */
 export function passphraseToAppNetwork(passphrase: string): AppNetwork | null {
   for (const [key, manifest] of Object.entries(NETWORK_MANIFESTS)) {
     if (manifest.networkPassphrase === passphrase) return key as AppNetwork
