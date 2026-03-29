@@ -125,7 +125,8 @@ pub fn check_claim_fields(
     if details.len() > DETAILS_MAX_LEN {
         return Err(Error::DetailsTooLong);
     }
-    if evidence.len() > IMAGE_URLS_MAX {
+    let max_evidence = crate::storage::get_max_evidence_count(env);
+    if evidence.len() > max_evidence {
         return Err(Error::TooManyImageUrls);
     }
     for entry in evidence.iter() {

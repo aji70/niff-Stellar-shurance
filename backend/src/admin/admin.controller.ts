@@ -10,6 +10,7 @@ import {
   Query,
   UseGuards,
   Req,
+  Res,
   HttpCode,
   HttpStatus,
   NotFoundException,
@@ -17,7 +18,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString } from 'class-validator';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminRoleGuard } from './guards/admin-role.guard';
 import { AdminService } from './admin.service';
@@ -86,13 +87,49 @@ export class AdminController {
   /**
    * GET /admin/audits
    *
-   * Paginated read of the immutable admin audit log.
+   * Cursor-paginated, filterable read of the immutable admin audit log.
+   * Logs each access as a meta-audit entry.
    * Requires: admin role + valid JWT.
    */
   @Get('audits')
-  @ApiOperation({ summary: 'Paginated admin audit log' })
-  async getAudits(@Query() query: AuditQueryDto) {
-    return this.auditService.findAll(query.page, query.limit, query.action);
+  @ApiOperation({ summary: 'Cursor-paginated admin audit log with filters' })
+  async getAudits(@Query() query: AuditQueryDto, @Req() req: AdminRequest) {
+    const actor = req.user?.walletAddress ?? 'unknown';
+    // Meta-audit: log this access
+    await this.auditService.write({
+      actor,
+      action: 'audit_log_read',
+      payload: { cursor: query.cursor, limit: query.limit, action: query.action, actor: query.actor, from: query.from, to: query.to } as Record<string, unknown>,
+      ipAddress: req.ip,
+    });
+    return this.auditService.findAll(query);
+  }
+
+  /**
+   * GET /admin/audits/export
+   *
+   * Streaming CSV export of the audit log for the given filters.
+   * Logs each export as a meta-audit entry.
+   * Requires: admin role + valid JWT.
+   */
+  @Get('audits/export')
+  @ApiOperation({ summary: 'Streaming CSV export of the audit log' })
+  async exportAudits(
+    @Query() query: AuditQueryDto,
+    @Req() req: AdminRequest,
+    @Res() res: Response,
+  ) {
+    const actor = req.user?.walletAddress ?? 'unknown';
+    await this.auditService.write({
+      actor,
+      action: 'audit_log_export',
+      payload: { action: query.action, actor: query.actor, from: query.from, to: query.to } as Record<string, unknown>,
+      ipAddress: req.ip,
+    });
+    await this.auditService.streamCsv(
+      { action: query.action, actor: query.actor, from: query.from, to: query.to },
+      res,
+    );
   }
 
   /**

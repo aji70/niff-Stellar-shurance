@@ -368,3 +368,25 @@ pub fn set_sweep_cap(env: &Env, cap: Option<i128>) {
     let _admin = require_admin(env);
     storage::set_sweep_cap(env, cap);
 }
+
+#[contractevent(topics = ["niffyinsure", "max_evidence_count_updated"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MaxEvidenceCountUpdated {
+    pub old_count: u32,
+    pub new_count: u32,
+}
+
+/// Admin-only: set the maximum number of evidence entries allowed per claim.
+///
+/// Bounded by [`storage::MAX_EVIDENCE_COUNT_HARD_MAX`] to prevent griefing.
+/// Reductions do NOT retroactively invalidate existing claims.
+pub fn set_max_evidence_count(env: &Env, new_count: u32) -> Result<(), AdminError> {
+    let _admin = require_admin(env);
+    if new_count > storage::MAX_EVIDENCE_COUNT_HARD_MAX {
+        return Err(AdminError::InvalidAddress); // reuse closest available error
+    }
+    let old_count = storage::get_max_evidence_count(env);
+    storage::set_max_evidence_count(env, new_count);
+    MaxEvidenceCountUpdated { old_count, new_count }.publish(env);
+    Ok(())
+}

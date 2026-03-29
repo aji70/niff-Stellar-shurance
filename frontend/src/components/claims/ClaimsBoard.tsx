@@ -15,6 +15,7 @@ import type { ClaimBoard } from "@/lib/schemas/claims-board";
 import { ClaimList } from "./ClaimList";
 import { FilterBar } from "./FilterBar";
 import { PaginationControls } from "./PaginationControls";
+import { SkeletonRow } from "@/components/ui/skeleton";
 import type { ClaimFilters, TallyUpdate } from "./types";
 
 
@@ -175,16 +176,11 @@ export function ClaimsBoard() {
       {/* Main content area */}
       <section aria-label="Claims list" aria-live="polite" aria-atomic="false">
         {loading && (
-          <div
-            role="status"
-            aria-label="Loading claims"
-            className="flex justify-center py-12"
-          >
-            <span
-              aria-hidden="true"
-              className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"
-            />
+          <div role="status" aria-label="Loading claims" className="flex flex-col gap-2">
             <span className="sr-only">Loading claims…</span>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <SkeletonRow key={i} />
+            ))}
           </div>
         )}
 

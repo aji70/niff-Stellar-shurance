@@ -700,6 +700,18 @@ impl NiffyInsure {
         storage::get_sweep_cap(&env)
     }
 
+    /// Admin-only: set the maximum number of evidence entries per claim.
+    /// Hard max is [`storage::MAX_EVIDENCE_COUNT_HARD_MAX`] (20).
+    /// Reductions do NOT retroactively invalidate existing claims.
+    pub fn admin_set_max_evidence_count(env: Env, new_count: u32) -> Result<(), AdminError> {
+        admin::set_max_evidence_count(&env, new_count)
+    }
+
+    /// Read the current max evidence count (falls back to compile-time default when unset).
+    pub fn get_max_evidence_count(env: Env) -> u32 {
+        storage::get_max_evidence_count(&env)
+    }
+
     // ═════════════════════════════════════════════════════════════════════════════
     // PAUSE SYSTEM
     //

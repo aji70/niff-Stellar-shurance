@@ -52,6 +52,9 @@ pub enum DataKey {
     RollingClaimCap,
     /// Ledger length of each rolling window (bucket alignment uses current ledger sequence).
     RollingClaimWindowLedgers,
+    /// Admin-configurable max evidence entries per claim (u32).
+    /// Falls back to [`IMAGE_URLS_MAX`] when unset.
+    MaxEvidenceCount,
     // ── Reserved: future governance token (`governance_token` module) ────────
     /// Runtime toggle: only meaningful when crate is built with `governance-token`.
     /// Unset or `false` in MVP; no token logic runs unless feature + flag align.
@@ -637,6 +640,28 @@ pub fn set_sweep_cap(env: &Env, cap: Option<i128>) {
 /// Get configured sweep cap (None if not set).
 pub fn get_sweep_cap(env: &Env) -> Option<i128> {
     env.storage().instance().get(&DataKey::SweepCap)
+}
+
+// ── Max evidence count (instance) ────────────────────────────────────────────
+
+/// Absolute hard maximum the admin setter will never exceed.
+/// Prevents griefing via unbounded evidence storage.
+pub const MAX_EVIDENCE_COUNT_HARD_MAX: u32 = 20;
+
+/// Set admin-configurable max evidence entries per claim.
+/// Caller must enforce `count <= MAX_EVIDENCE_COUNT_HARD_MAX`.
+pub fn set_max_evidence_count(env: &Env, count: u32) {
+    env.storage()
+        .instance()
+        .set(&DataKey::MaxEvidenceCount, &count);
+}
+
+/// Current max evidence count. Falls back to compile-time [`crate::types::IMAGE_URLS_MAX`].
+pub fn get_max_evidence_count(env: &Env) -> u32 {
+    env.storage()
+        .instance()
+        .get(&DataKey::MaxEvidenceCount)
+        .unwrap_or(crate::types::IMAGE_URLS_MAX)
 }
 // ── Appeal vote (persistent) ──────────────────────────────────────────────────
 

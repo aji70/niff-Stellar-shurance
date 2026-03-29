@@ -36,7 +36,7 @@ export {
   TableCaption,
 } from './table'
 export { DataTable, type Column } from './data-table'
-export { Skeleton } from './skeleton'
+export { Skeleton, SkeletonRow, SkeletonCard, SkeletonDetail } from './skeleton'
 export { Progress } from './progress'
 export {
   Card,
@@ -47,6 +47,7 @@ export {
   CardContent,
 } from './card'
 export { Badge, badgeVariants } from './badge'
+export { WalletAddress, type WalletAddressProps, type StellarNetwork } from './wallet-address'
 export { Stepper, StepContent, type Step } from './stepper'
 export { InlineError } from './inline-error'
 export { VoteEducationPanel } from '../claims/vote-education-panel'

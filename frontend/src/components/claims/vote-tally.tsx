@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
+import { SkeletonDetail } from '@/components/ui/skeleton'
 import {
   Claim,
   ClaimStatus,
@@ -77,13 +77,7 @@ export function VoteTally({ claim, currentLedger, loading }: VoteTallyProps) {
   const countdown = useCountdown(voteOpen && !terminal ? msLeft : 0)
 
   if (loading) {
-    return (
-      <div className="space-y-3" aria-busy="true" aria-label="Loading vote tally">
-        <Skeleton className="h-5 w-32" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-3/4" />
-      </div>
-    )
+    return <SkeletonDetail aria-busy="true" aria-label="Loading vote tally" />
   }
 
   return (

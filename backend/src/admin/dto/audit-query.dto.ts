@@ -1,14 +1,12 @@
-import { IsOptional, IsInt, Min, Max, IsString } from 'class-validator';
+import { IsOptional, IsInt, Min, Max, IsString, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class AuditQueryDto {
-  @ApiPropertyOptional({ default: 1 })
+  @ApiPropertyOptional({ description: 'Cursor: last id from previous page (UUID string)' })
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page: number = 1;
+  @IsString()
+  cursor?: string;
 
   @ApiPropertyOptional({ default: 20, maximum: 100 })
   @IsOptional()
@@ -22,4 +20,19 @@ export class AuditQueryDto {
   @IsOptional()
   @IsString()
   action?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by actor wallet address' })
+  @IsOptional()
+  @IsString()
+  actor?: string;
+
+  @ApiPropertyOptional({ description: 'ISO 8601 start date (inclusive)' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'ISO 8601 end date (inclusive)' })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
 }
