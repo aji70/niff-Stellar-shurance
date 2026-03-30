@@ -156,6 +156,14 @@ async function bootstrap() {
     "Bootstrap",
   );
   Logger.log(`📚 Swagger docs: http://localhost:${port}/docs`, "Bootstrap");
+  const graphqlEnabled = configService.get<boolean>('GRAPHQL_ENABLED', true);
+  if (graphqlEnabled) {
+    const graphqlPath = configService.get<string>('GRAPHQL_PATH', '/graphql');
+    Logger.log(
+      `🧭 GraphQL endpoint: http://localhost:${port}/api${graphqlPath}`,
+      'Bootstrap',
+    );
+  }
   Logger.log(
     `🌐 Network: ${networkConfig.network.toUpperCase()} | Contract: ${networkConfig.contractIds.niffyinsure || '(not set)'}`,
     "Bootstrap",

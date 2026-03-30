@@ -23,6 +23,7 @@ import { ChainModule } from './chain/chain.module';
 import { FeatureFlagsModule } from './feature-flags/feature-flags.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { TenantModule } from './tenant/tenant.module';
+import { GraphqlApiModule } from './graphql/graphql.module';
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
 import { AppLoggerService } from './common/logger/app-logger.service';
 import { OracleHooksController } from './experimental/oracle-hooks.controller';
@@ -68,6 +69,7 @@ import { IdempotencyMiddleware } from './common/middleware/idempotency.middlewar
     FeatureFlagsModule,
     MetricsModule,
     TenantModule,
+    GraphqlApiModule,
   ],
   controllers: [OracleHooksController, BetaCalculatorsController],
   providers: [RequestContextMiddleware, AppLoggerService],

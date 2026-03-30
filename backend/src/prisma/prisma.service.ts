@@ -32,12 +32,14 @@ export class PrismaService
   implements OnModuleInit, OnModuleDestroy
 {
   private readonly logger = new Logger(PrismaService.name);
+  private readonly slowQueryThresholdMs: number;
 
   constructor(private readonly config: ConfigService) {
     const poolMax = config.get<number>('DB_POOL_MAX', 10);
     const poolMin = config.get<number>('DB_POOL_MIN', 2);
     const idleTimeout = config.get<number>('DB_POOL_IDLE_TIMEOUT_MS', 30_000);
     const connTimeout = config.get<number>('DB_POOL_CONNECTION_TIMEOUT_MS', 5_000);
+    const slowQueryThresholdMs = config.get<number>('DB_SLOW_QUERY_MS', 250);
 
     super({
       datasources: {
@@ -53,6 +55,27 @@ export class PrismaService
           : ['warn', 'error'],
     });
 
+    this.slowQueryThresholdMs = slowQueryThresholdMs;
+
+    this.$use(async (params, next) => {
+      const startedAt = Date.now();
+      const result = await next(params);
+      const durationMs = Date.now() - startedAt;
+
+      if (durationMs >= this.slowQueryThresholdMs) {
+        this.logger.warn(
+          JSON.stringify({
+            event: 'prisma_slow_query',
+            model: params.model,
+            action: params.action,
+            durationMs,
+          }),
+        );
+      }
+
+      return result;
+    });
+
     // Expose pool config for observability (logged at startup).
     this.logger.log(
       JSON.stringify({
@@ -61,6 +84,7 @@ export class PrismaService
         poolMin,
         idleTimeoutMs: idleTimeout,
         connTimeoutMs: connTimeout,
+        slowQueryThresholdMs,
       }),
     );
   }

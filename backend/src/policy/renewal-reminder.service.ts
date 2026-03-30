@@ -152,7 +152,7 @@ export class RenewalReminderService {
     let skippedOptOut = 0;
     let skippedDeduplicated = 0;
 
-    // eslint-disable-next-line no-constant-condition
+     
     while (true) {
       const page = await this.prisma.policy.findMany({
         where: {

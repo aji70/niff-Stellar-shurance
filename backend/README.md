@@ -57,6 +57,16 @@ Generic `{statusCode, message}` (no violations – security: no hints).
 ## API
 See `/docs`.
 
+## GraphQL
+
+GraphQL is exposed at `/api/graphql`.
+
+- Schema style: code-first (`src/graphql`)
+- Production introspection defaults to off
+- Apollo landing page is disabled in production
+- See [`docs/graphql.md`](./docs/graphql.md)
+- Security sign-off checklist: [`docs/graphql-security-checklist.md`](./docs/graphql-security-checklist.md)
+
 ## Local Dev
 ```bash
 cd backend
@@ -68,4 +78,3 @@ npm run start:dev
 Docker: `make docker-up`
 
 See Makefile.
-

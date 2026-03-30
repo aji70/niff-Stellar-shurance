@@ -160,4 +160,30 @@ export const validationSchema = Joi.object({
     .description('Idle connection reclaim timeout (ms)'),
   DB_POOL_CONNECTION_TIMEOUT_MS: Joi.number().integer().min(500).default(5_000)
     .description('Max wait for a free connection before failing (ms)'),
+  DB_SLOW_QUERY_MS: Joi.number().integer().min(10).default(250)
+    .description('Warn when a single DB query exceeds this latency threshold (ms)'),
+  GRAPHQL_ENABLED: Joi.boolean().default(true)
+    .description('Enable the GraphQL endpoint'),
+  GRAPHQL_PATH: Joi.string().default('/graphql')
+    .description('HTTP path for GraphQL requests'),
+  GRAPHQL_INTROSPECTION_IN_PRODUCTION: Joi.boolean().default(false)
+    .description('Allow schema introspection when NODE_ENV=production'),
+  GRAPHQL_MAX_DEPTH: Joi.number().integer().min(1).default(8)
+    .description('Maximum allowed GraphQL selection depth'),
+  GRAPHQL_MAX_COMPLEXITY: Joi.number().integer().min(1).default(250)
+    .description('Maximum estimated GraphQL query cost'),
+  GRAPHQL_RATE_LIMIT_MAX: Joi.number().integer().min(1).default(60)
+    .description('Maximum GraphQL operations per rate-limit window'),
+  GRAPHQL_RATE_LIMIT_WINDOW_MS: Joi.number().integer().min(1000).default(60_000)
+    .description('GraphQL rate-limit window length in milliseconds'),
+  GRAPHQL_SLOW_OPERATION_MS: Joi.number().integer().min(10).default(750)
+    .description('Warn when a GraphQL operation exceeds this latency threshold (ms)'),
+  GRAPHQL_PERSISTED_QUERIES_ENABLED: Joi.boolean().default(false)
+    .description('Enable Apollo-style automatic persisted queries for GraphQL clients'),
+  GRAPHQL_PERSISTED_QUERY_TTL_SECONDS: Joi.number().integer().min(60).default(86_400)
+    .description('TTL for persisted GraphQL queries stored in Redis'),
+  GRAPHQL_POLICY_CLAIMS_DEFAULT_LIMIT: Joi.number().integer().min(1).max(100).default(10)
+    .description('Default nested claims page size when resolving policy.claims'),
+  GRAPHQL_POLICY_CLAIMS_MAX_LIMIT: Joi.number().integer().min(1).max(250).default(25)
+    .description('Maximum nested claims page size when resolving policy.claims'),
 });
