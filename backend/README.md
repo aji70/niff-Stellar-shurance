@@ -71,8 +71,13 @@ GraphQL is exposed at `/api/graphql`.
 ```bash
 cd backend
 npm i
+npm run env:example:generate
 npm run start:dev
 ```
+
+Environment configuration is defined in [`src/config/env.definitions.ts`](/home/json/Desktop/Drips/niff-Stellar-shurance/backend/src/config/env.definitions.ts). Update that file first, then regenerate [`backend/.env.example`](/home/json/Desktop/Drips/niff-Stellar-shurance/backend/.env.example) with `npm run env:example:generate`.
+
+Secrets guidance and rotation procedures live in [`docs/ops/secrets-management-runbook.md`](/home/json/Desktop/Drips/niff-Stellar-shurance/docs/ops/secrets-management-runbook.md). Generate a fresh JWT signing key with `npm run secrets:generate:jwt`.
 
 ## Deployment
 Docker: `make docker-up`

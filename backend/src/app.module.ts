@@ -3,7 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { TerminusModule } from '@nestjs/terminus';
 import { ThrottlerModule, ThrottlerStorage } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
-import { validationSchema } from './config/env.validation';
+import { validateEnvironment } from './config/env.validation';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { CacheModule } from './cache/cache.module';
@@ -35,9 +35,9 @@ import { IdempotencyMiddleware } from './common/middleware/idempotency.middlewar
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
-      validationSchema,
+      validate: validateEnvironment,
       validationOptions: {
-        abortEarly: true,
+        abortEarly: false,
       },
     }),
     ThrottlerModule.forRootAsync({

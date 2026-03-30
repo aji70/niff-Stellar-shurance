@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   FEATURE_FLAGS_DISABLED_STATUS_ENV,
   FEATURE_FLAGS_JSON_ENV,
@@ -12,10 +13,10 @@ export class FeatureFlagsService {
   private readonly featureMap: FeatureMap;
   private readonly disabledStatusCode: 403 | 404;
 
-  constructor() {
-    this.featureMap = this.parseFlags(process.env[FEATURE_FLAGS_JSON_ENV]);
+  constructor(private readonly config: ConfigService) {
+    this.featureMap = this.parseFlags(this.config.get<string>(FEATURE_FLAGS_JSON_ENV));
     this.disabledStatusCode =
-      process.env[FEATURE_FLAGS_DISABLED_STATUS_ENV] === '403' ? 403 : 404;
+      this.config.get<string>(FEATURE_FLAGS_DISABLED_STATUS_ENV) === '403' ? 403 : 404;
   }
 
   isEnabled(featureName: string): boolean {

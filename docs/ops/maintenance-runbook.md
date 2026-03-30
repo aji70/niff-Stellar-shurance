@@ -8,6 +8,10 @@
 
 ## 1. Wasm Drift Detection
 
+See also **[secrets-management-runbook.md](./secrets-management-runbook.md)** for
+secret ownership, rotation cadence, JWT key generation, and leak-response
+steps.
+
 ### What it does
 `WasmDriftService` runs every 6 hours. It fetches the on-chain wasm hash for each
 contract listed in `contracts/deployment-registry.json`, compares it to the
@@ -185,4 +189,3 @@ There is **no protocol reward** for keepers; operators run them to support produ
 ### Failure modes
 - `process_expired`: reverts with `PolicyLapseNotReached` until grace end; `OpenClaimsMustFinalize` if a claim is still open on that policy.
 - `process_deadline`: reverts with `VotingWindowStillOpen` until after the voting deadline ledger; `ClaimAlreadyTerminal` if already finalized; `ClaimNotProcessing` if the claim left `Processing` without being terminal (e.g. appeal flows); `CalculatorPaused` while claims are paused (unlike `finalize_claim`, which panics on pause).
-
