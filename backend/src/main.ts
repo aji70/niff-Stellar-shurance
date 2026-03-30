@@ -1,3 +1,7 @@
+// OpenTelemetry instrumentation MUST be imported before any other module
+// so that auto-instrumentation patches are applied at load time.
+import './tracing'
+
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe, Logger } from "@nestjs/common";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
