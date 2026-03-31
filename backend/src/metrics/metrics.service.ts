@@ -25,6 +25,8 @@ export class MetricsService implements OnModuleInit {
   readonly httpRequestDuration: client.Histogram<string>;
   readonly httpRequestTotal: client.Counter<string>;
   readonly http5xxTotal: client.Counter<string>;
+  readonly graphqlOperationDuration: client.Histogram<string>;
+  readonly graphqlOperationTotal: client.Counter<string>;
 
   // ── Queue / DLQ metrics ───────────────────────────────────────────────────
   readonly dlqDepth: client.Gauge<string>;
@@ -72,6 +74,21 @@ export class MetricsService implements OnModuleInit {
       name: 'http_5xx_errors_total',
       help: 'Total HTTP 5xx responses',
       labelNames: ['method', 'route'],
+      registers: [this.registry],
+    });
+
+    this.graphqlOperationDuration = new client.Histogram({
+      name: 'graphql_operation_duration_seconds',
+      help: 'GraphQL operation latency in seconds',
+      labelNames: ['operation_type', 'status'],
+      buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+      registers: [this.registry],
+    });
+
+    this.graphqlOperationTotal = new client.Counter({
+      name: 'graphql_operations_total',
+      help: 'Total GraphQL operations',
+      labelNames: ['operation_type', 'status'],
       registers: [this.registry],
     });
 
@@ -170,6 +187,22 @@ export class MetricsService implements OnModuleInit {
     if (statusCode >= 500) {
       this.http5xxTotal.inc({ method, route });
     }
+  }
+
+  recordGraphqlOperation(opts: {
+    operationType: string;
+    status: 'success' | 'error' | 'rejected';
+    durationMs: number;
+  }) {
+    const durationSec = opts.durationMs / 1000;
+    this.graphqlOperationDuration.observe(
+      { operation_type: opts.operationType, status: opts.status },
+      durationSec,
+    );
+    this.graphqlOperationTotal.inc({
+      operation_type: opts.operationType,
+      status: opts.status,
+    });
   }
 
   recordRpcCall(opts: {

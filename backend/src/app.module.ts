@@ -3,7 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { TerminusModule } from '@nestjs/terminus';
 import { ThrottlerModule, ThrottlerStorage } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
-import { validationSchema } from './config/env.validation';
+import { validateEnvironment } from './config/env.validation';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { CacheModule } from './cache/cache.module';
@@ -23,6 +23,7 @@ import { ChainModule } from './chain/chain.module';
 import { FeatureFlagsModule } from './feature-flags/feature-flags.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { TenantModule } from './tenant/tenant.module';
+import { GraphqlApiModule } from './graphql/graphql.module';
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
 import { AppLoggerService } from './common/logger/app-logger.service';
 import { OracleHooksController } from './experimental/oracle-hooks.controller';
@@ -34,9 +35,9 @@ import { IdempotencyMiddleware } from './common/middleware/idempotency.middlewar
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
-      validationSchema,
+      validate: validateEnvironment,
       validationOptions: {
-        abortEarly: true,
+        abortEarly: false,
       },
     }),
     ThrottlerModule.forRootAsync({
@@ -68,6 +69,7 @@ import { IdempotencyMiddleware } from './common/middleware/idempotency.middlewar
     FeatureFlagsModule,
     MetricsModule,
     TenantModule,
+    GraphqlApiModule,
   ],
   controllers: [OracleHooksController, BetaCalculatorsController],
   providers: [RequestContextMiddleware, AppLoggerService],
