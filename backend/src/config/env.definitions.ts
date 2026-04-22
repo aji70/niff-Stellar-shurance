@@ -39,6 +39,7 @@ export interface EnvironmentVariables {
   IPFS_MIN_FILE_SIZE: number;
   IPFS_STRIP_EXIF: boolean;
   IPFS_GATEWAY: string;
+  ALLOWED_IPFS_GATEWAYS: string;
   IPFS_PROJECT_ID: string;
   IPFS_PROJECT_SECRET: string;
   JWT_SECRET: string;
@@ -478,6 +479,16 @@ export const ENV_DEFINITIONS: EnvDefinitionMap = {
     example: 'https://ipfs.io',
     required: 'required',
     schema: Joi.string().uri().default('https://ipfs.io'),
+  },
+  ALLOWED_IPFS_GATEWAYS: {
+    key: 'ALLOWED_IPFS_GATEWAYS',
+    section: 'IPFS',
+    description:
+      'Comma-separated list of allowed IPFS gateway hostnames for evidence URL validation. ' +
+      'Defaults to the built-in list when empty. Changes take effect on next deploy (no restart needed for env-only changes).',
+    example: 'ipfs.io,cloudflare-ipfs.com,gateway.pinata.cloud,dweb.link,nftstorage.link',
+    required: 'optional',
+    schema: Joi.string().allow('').default(''),
   },
   IPFS_PROJECT_ID: {
     key: 'IPFS_PROJECT_ID',
