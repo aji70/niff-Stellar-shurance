@@ -272,7 +272,7 @@ export class IpfsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Check IPFS service health',
-    description: 'Returns the health status of the IPFS provider.',
+    description: 'Returns the health status of the IPFS provider chain, including all configured providers.',
   })
   @ApiResponse({
     status: 200,
@@ -281,15 +281,29 @@ export class IpfsController {
       type: 'object',
       properties: {
         healthy: { type: 'boolean' },
-        provider: { type: 'string' },
+        primaryProvider: { type: 'string' },
+        providers: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              provider: { type: 'string' },
+              healthy: { type: 'boolean' },
+              lastCheckedAt: { type: 'string', format: 'date-time' },
+              consecutiveFailures: { type: 'number' },
+            },
+          },
+        },
       },
     },
   })
   async healthCheck() {
     const isHealthy = await this.ipfsService.isHealthy();
+    const healthStatus = this.ipfsService.getProviderHealthStatus();
     return {
       healthy: isHealthy,
-      provider: this.ipfsService.getProviderName(),
+      primaryProvider: this.ipfsService.getProviderName(),
+      providers: healthStatus,
     };
   }
 }
