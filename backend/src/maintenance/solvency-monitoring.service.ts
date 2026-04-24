@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
@@ -34,6 +34,7 @@ export class SolvencyMonitoringService {
     private readonly prisma: PrismaService,
     private readonly soroban: SorobanService,
     private readonly redis: RedisService,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   /** Dashboard: last job snapshot only — no Soroban RPC. */
@@ -153,6 +154,15 @@ export class SolvencyMonitoringService {
     }
 
     const buffer = balance - outstanding;
+    this.metrics?.recordSolvencyThreshold({
+      tenant: tenantFilter || 'default',
+      thresholdStroops: threshold,
+    });
+    this.metrics?.recordSolvencyBuffer({
+      tenant: tenantFilter || 'default',
+      bufferStroops: buffer,
+    });
+
     const below = buffer < threshold;
 
     const snap: SolvencySnapshot = {

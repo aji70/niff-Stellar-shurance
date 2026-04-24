@@ -19,6 +19,47 @@ This means authenticated users behind a shared corporate NAT are not penalised c
 > Limits for claim submission (`POST /api/claims/submit`) are additionally governed by
 > a per-policy ledger-window counter (see claim rate limiting docs).
 
+## Claim Submission Rate Limits
+
+Claim submission (`POST /api/claims/submit`) is protected by **three layers** of rate limiting:
+
+1. **Global circuit breaker** — prevents system overload from any source.
+2. **Per-wallet sliding window** — prevents a single wallet from flooding claims.
+3. **Per-policy ledger window** — prevents spam against a single policy.
+
+### Layer 1: Global Circuit Breaker
+
+| Limit | Window | Rationale |
+|---|---|---|
+| 100 claims | 5 minutes | Protects governance capacity and DAO voter attention across all policies. If triggered, all claim submissions are rejected until the window slides. |
+
+### Layer 2: Per-Wallet Sliding Window
+
+| Limit | Window | Rationale |
+|---|---|---|
+| 3 claims | 1 hour | Prevents a single wallet from exhausting governance for a specific tenant or policy type. Aligns with typical legitimate catastrophic-event filing patterns (1–2 claims per hour). |
+
+### Layer 3: Per-Policy Ledger Window
+
+| Limit | Window | Rationale |
+|---|---|---|
+| 5 claims | 17,280 ledgers (~24h) | Prevents spam against an individual policy. Uses ledger-based windows to avoid clock-skew issues. |
+
+### Claim Rate Limit Configuration
+
+Environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `GLOBAL_RATE_LIMIT` | 100 | Global claim submissions per window |
+| `GLOBAL_RATE_LIMIT_WINDOW_SECONDS` | 300 | Global window in seconds |
+| `WALLET_RATE_LIMIT` | 3 | Claims per wallet per window |
+| `WALLET_RATE_LIMIT_WINDOW_SECONDS` | 3600 | Wallet window in seconds |
+| `RATE_LIMIT_DEFAULTS.DEFAULT_LIMIT` | 5 | Per-policy claim limit |
+| `RATE_LIMIT_DEFAULTS.WINDOW_SIZE_LEDGERS` | 17280 | Per-policy window in ledgers |
+
+All values are stored in Redis and survive service restarts.
+
 ## Response Headers
 
 Every response includes:

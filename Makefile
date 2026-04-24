@@ -50,3 +50,11 @@ wasm-opt-check: build
 clean:
 	cargo clean
 	rm -rf artifacts
+
+# ── OpenAPI client codegen ────────────────────────────────────────────────────
+# Exports the backend OpenAPI spec to backend/openapi.json, then generates
+# TypeScript types into frontend/src/lib/api/generated/openapi.d.ts.
+# Usage: make generate-client
+generate-client:
+	cd backend && npm run export-spec
+	cd frontend && npm run generate-client

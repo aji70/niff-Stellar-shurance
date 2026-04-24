@@ -43,3 +43,4 @@ src/components/ui/button.stories.tsx   ← same directory
 ## CI
 
 `npm run build-storybook` runs on every push/PR to `main` via `.github/workflows/storybook.yml`. A failing build blocks merge.
+

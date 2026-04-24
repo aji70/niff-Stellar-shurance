@@ -1,3 +1,19 @@
+/**
+ * Per-wallet rate limit: number of claims allowed per wallet per time window.
+ */
+export const WALLET_RATE_LIMIT_DEFAULTS = {
+  LIMIT: 3,                    // claims per wallet per window
+  WINDOW_SECONDS: 3600,        // 1 hour sliding window
+};
+
+/**
+ * Global rate limit circuit breaker: total claims across all wallets per window.
+ */
+export const GLOBAL_RATE_LIMIT_DEFAULTS = {
+  LIMIT: 100,                  // total claims per window across all wallets
+  WINDOW_SECONDS: 300,         // 5 minute sliding window
+};
+
 export const RATE_LIMIT_DEFAULTS = {
   DEFAULT_LIMIT: 5,              // claims per window
   WINDOW_SIZE_LEDGERS: 17_280,   // ~24 hours at 5s/ledger
@@ -9,4 +25,6 @@ export const REDIS_KEYS = {
   COUNTER: (policyId: string) => `rate_limit:counter:${policyId}`,
   CONFIG: (policyId: string) => `rate_limit:config:${policyId}`,
   DEFAULTS: 'rate_limit:defaults',
+  WALLET_WINDOW: (wallet: string) => `rate_limit:wallet:${wallet}`,
+  GLOBAL_WINDOW: 'rate_limit:global',
 };

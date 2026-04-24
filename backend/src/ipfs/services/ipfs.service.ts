@@ -2,13 +2,14 @@
  * IPFS Service
  * 
  * Main service for IPFS file uploads.
- * Orchestrates validation, idempotency, provider selection, and antivirus scanning.
+ * Orchestrates validation, idempotency, provider chain fallback, and antivirus scanning.
  */
 import { Injectable, Logger, BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { IpfsProvider, IpfsUploadResult, generateGatewayUrls } from '../interfaces/ipfs-provider.interface';
+import { IpfsUploadResult, generateGatewayUrls } from '../interfaces/ipfs-provider.interface';
 import { IdempotencyService } from './idempotency.service';
 import { FileValidationService } from './file-validation.service';
+import { IpfsProviderChainService } from './ipfs-provider-chain.service';
 
 /**
  * Upload response format
@@ -55,30 +56,20 @@ export interface ScanResult {
 @Injectable()
 export class IpfsService {
   private readonly logger = new Logger(IpfsService.name);
-  private provider!: IpfsProvider;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly idempotencyService: IdempotencyService,
     private readonly fileValidationService: FileValidationService,
-  ) {
-    this.initializeProvider();
-  }
+    private readonly providerChain: IpfsProviderChainService,
+  ) {}
 
   /**
-   * Initialize the IPFS provider based on configuration
+   * Set the provider chain (called by module during init)
    */
-  private initializeProvider(): void {
-    // Import providers dynamically to avoid circular dependencies
-    // Provider selection is done in the module
-  }
-
-  /**
-   * Set the IPFS provider (called by module)
-   */
-  setProvider(provider: IpfsProvider): void {
-    this.provider = provider;
-    this.logger.log(`IPFS provider set to: ${provider.name}`);
+  setProviderChain(chain: IpfsProviderChainService): void {
+    // Injected via constructor; this method kept for backwards compatibility
+    this.logger.log('IPFS provider chain initialized');
   }
 
   /**
@@ -156,31 +147,26 @@ export class IpfsService {
       };
     }
 
-    // Check provider is available
-    if (!this.provider) {
-      throw new ServiceUnavailableException('IPFS provider not configured');
-    }
-
-    // Check provider health
-    const isHealthy = await this.provider.isHealthy();
-    if (!isHealthy) {
-      throw new ServiceUnavailableException('IPFS provider is temporarily unavailable');
-    }
-
     const contentSha256Hex =
       this.fileValidationService.calculateContentHash(processedBuffer);
 
-    // Upload to IPFS
+    // Upload to IPFS via provider chain (handles fallback automatically)
     this.logger.debug(`Uploading ${sanitizedFilename} (${processedBuffer.length} bytes) to IPFS`);
 
     let uploadResult: IpfsUploadResult;
     try {
-      uploadResult = await this.provider.upload(
+      const chainResult = await this.providerChain.upload(
         processedBuffer,
         sanitizedFilename,
         mimeType,
         { metadata: options?.metadata },
       );
+      uploadResult = chainResult;
+      if (chainResult.fallbackCount > 0) {
+        this.logger.log(
+          `IPFS upload succeeded via ${chainResult.providerName} after ${chainResult.fallbackCount} fallback(s)`,
+        );
+      }
     } catch (error) {
       this.logger.error(`IPFS upload failed: ${error}`);
       throw new ServiceUnavailableException('Failed to upload to IPFS');
@@ -252,37 +238,40 @@ export class IpfsService {
    * Check if content exists on IPFS
    */
   async exists(cid: string): Promise<boolean> {
-    if (!this.provider?.exists) {
-      return false;
-    }
-    return this.provider.exists(cid);
+    const result = await this.providerChain.exists(cid);
+    return result.exists;
   }
 
   /**
    * Unpin content from IPFS
    */
   async unpin(cid: string): Promise<boolean> {
-    if (!this.provider?.unpin) {
-      throw new BadRequestException('Provider does not support unpinning');
+    const result = await this.providerChain.unpin(cid);
+    if (!result.success) {
+      throw new BadRequestException('No healthy provider supports unpinning');
     }
-    return this.provider.unpin(cid);
+    return true;
   }
 
   /**
    * Get provider health status
    */
   async isHealthy(): Promise<boolean> {
-    if (!this.provider) {
-      return false;
-    }
-    return this.provider.isHealthy();
+    return this.providerChain.getHealthyProviders().length > 0;
   }
 
   /**
-   * Get provider name
+   * Get primary provider name
    */
   getProviderName(): string {
-    return this.provider?.name || 'unknown';
+    return this.providerChain.getPrimaryProviderName();
+  }
+
+  /**
+   * Get full health status for all providers
+   */
+  getProviderHealthStatus() {
+    return this.providerChain.getHealthStatus();
   }
 
   /**

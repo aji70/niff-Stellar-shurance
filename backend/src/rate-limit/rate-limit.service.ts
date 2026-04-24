@@ -1,7 +1,12 @@
 import { Injectable, Logger, OnModuleInit, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../cache/redis.service';
-import { RATE_LIMIT_DEFAULTS, REDIS_KEYS } from './rate-limit.constants';
+import {
+  RATE_LIMIT_DEFAULTS,
+  REDIS_KEYS,
+  WALLET_RATE_LIMIT_DEFAULTS,
+  GLOBAL_RATE_LIMIT_DEFAULTS,
+} from './rate-limit.constants';
 
 export interface RateLimitCheckResult {
   allowed: boolean;
@@ -275,6 +280,93 @@ export class RateLimitService implements OnModuleInit {
     } catch (error) {
       this.logger.error(`Failed to disable override for ${policyId}: ${error}`);
       throw new BadRequestException('Failed to disable override');
+    }
+  }
+
+  // ── Per-wallet sliding window rate limit ────────────────────────────────
+
+  /**
+   * Check if a wallet has exceeded its claim submission rate limit.
+   * Uses a Redis sorted-set for a true sliding window.
+   *
+   * @returns { allowed, retryAfterSeconds }
+   */
+  async checkWalletLimit(walletAddress: string): Promise<{ allowed: boolean; retryAfterSeconds: number }> {
+    try {
+      const client = this.redis.getClient();
+      const key = REDIS_KEYS.WALLET_WINDOW(walletAddress.toLowerCase());
+      const nowMs = Date.now();
+      const windowMs = this.config.get<number>('WALLET_RATE_LIMIT_WINDOW_SECONDS', WALLET_RATE_LIMIT_DEFAULTS.WINDOW_SECONDS) * 1000;
+      const limit = this.config.get<number>('WALLET_RATE_LIMIT', WALLET_RATE_LIMIT_DEFAULTS.LIMIT);
+      const windowStart = nowMs - windowMs;
+
+      // Remove entries outside the sliding window
+      await client.zremrangebyscore(key, 0, windowStart);
+
+      // Count current entries in window
+      const currentCount = await client.zcard(key);
+
+      if (currentCount >= limit) {
+        // Find the oldest entry in the window to calculate retry-after
+        const oldest = await client.zrange(key, 0, 0, 'WITHSCORES');
+        const oldestTimestamp = oldest.length > 1 ? parseInt(oldest[1], 10) : windowStart;
+        const retryAfterSeconds = Math.max(1, Math.ceil((oldestTimestamp + windowMs - nowMs) / 1000));
+        this.logger.warn(`Wallet rate limit exceeded for ${walletAddress}: ${currentCount}/${limit}`);
+        return { allowed: false, retryAfterSeconds };
+      }
+
+      // Add current request timestamp
+      await client.zadd(key, nowMs, `${nowMs}-${Math.random().toString(36).slice(2)}`);
+      await client.pexpire(key, windowMs * 2);
+
+      return { allowed: true, retryAfterSeconds: 0 };
+    } catch (error) {
+      this.logger.error(`Wallet rate limit check failed for ${walletAddress}: ${error}`);
+      // Fail open
+      return { allowed: true, retryAfterSeconds: 0 };
+    }
+  }
+
+  // ── Global circuit breaker ──────────────────────────────────────────────
+
+  /**
+   * Check if the global claim submission rate limit (circuit breaker) is active.
+   * Uses a Redis sorted-set for a true sliding window.
+   *
+   * @returns { allowed, retryAfterSeconds }
+   */
+  async checkGlobalLimit(): Promise<{ allowed: boolean; retryAfterSeconds: number }> {
+    try {
+      const client = this.redis.getClient();
+      const key = REDIS_KEYS.GLOBAL_WINDOW;
+      const nowMs = Date.now();
+      const windowMs = this.config.get<number>('GLOBAL_RATE_LIMIT_WINDOW_SECONDS', GLOBAL_RATE_LIMIT_DEFAULTS.WINDOW_SECONDS) * 1000;
+      const limit = this.config.get<number>('GLOBAL_RATE_LIMIT', GLOBAL_RATE_LIMIT_DEFAULTS.LIMIT);
+      const windowStart = nowMs - windowMs;
+
+      // Remove entries outside the sliding window
+      await client.zremrangebyscore(key, 0, windowStart);
+
+      // Count current entries in window
+      const currentCount = await client.zcard(key);
+
+      if (currentCount >= limit) {
+        const oldest = await client.zrange(key, 0, 0, 'WITHSCORES');
+        const oldestTimestamp = oldest.length > 1 ? parseInt(oldest[1], 10) : windowStart;
+        const retryAfterSeconds = Math.max(1, Math.ceil((oldestTimestamp + windowMs - nowMs) / 1000));
+        this.logger.warn(`Global rate limit (circuit breaker) triggered: ${currentCount}/${limit}`);
+        return { allowed: false, retryAfterSeconds };
+      }
+
+      // Add current request timestamp
+      await client.zadd(key, nowMs, `${nowMs}-${Math.random().toString(36).slice(2)}`);
+      await client.pexpire(key, windowMs * 2);
+
+      return { allowed: true, retryAfterSeconds: 0 };
+    } catch (error) {
+      this.logger.error(`Global rate limit check failed: ${error}`);
+      // Fail open
+      return { allowed: true, retryAfterSeconds: 0 };
     }
   }
 }
