@@ -42,7 +42,10 @@ Thumbs.db
 
 # Test artifacts
 **/test_snapshots/
+**/__snapshots__/
 proptest-regressions/
+*.snap
+*.snap.new
 
 # Logs
 *.log
