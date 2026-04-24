@@ -7,6 +7,7 @@ import { RedisService } from '../cache/redis.service';
 import { TenantContextService } from '../tenant/tenant-context.service';
 import { claimTenantWhere, assertTenantOwnership } from '../tenant/tenant-filter.helper';
 import { ReconciliationService } from '../indexer/reconciliation.service';
+import { ClaimAggregationService } from './services/claim-aggregation.service';
 import {
   ClaimDetailResponseDto,
   ClaimsListResponseDto,
@@ -38,6 +39,7 @@ export class ClaimsService {
     private readonly soroban: SorobanService,
     private readonly tenantCtx: TenantContextService,
     private readonly reconciliation: ReconciliationService,
+    private readonly aggregation: ClaimAggregationService,
   ) {
     this.cacheTtl = this.config.get<number>('CACHE_TTL_SECONDS', 60);
     this.indexerNetwork = this.config.get<string>('STELLAR_NETWORK', 'testnet');
@@ -78,7 +80,16 @@ export class ClaimsService {
     ]);
 
     const response: ClaimsListResponseDto = {
-      data: claims.map((claim) => this.claimViewMapper.transformClaim(claim, lastLedger)),
+      data: await Promise.all(
+        claims.map(async (claim) => {
+          const agg = await this.aggregation.aggregate(claim.id, lastLedger);
+          return this.claimViewMapper.transformClaim(claim, lastLedger, {
+            quorum_progress_pct: agg.quorum_progress_pct,
+            votes_needed: agg.votes_needed,
+            deadline_estimate_utc: agg.deadline_estimate_utc,
+          });
+        }),
+      ),
       pagination: {
         next_cursor: buildNextCursor(claims, limit, total),
         total,
@@ -123,11 +134,20 @@ export class ClaimsService {
     ]);
 
     const openClaims = page.filter(
-      (claim) => this.getVotingDeadlineLedger(claim.createdAtLedger) > lastLedger,
+      (claim) => this.claimViewMapper.getVotingDeadlineLedger(claim.createdAtLedger) > lastLedger,
     );
 
     return {
-      data: openClaims.map((claim) => this.claimViewMapper.transformClaim(claim, lastLedger)),
+      data: await Promise.all(
+        openClaims.map(async (claim) => {
+          const agg = await this.aggregation.aggregate(claim.id, lastLedger);
+          return this.claimViewMapper.transformClaim(claim, lastLedger, {
+            quorum_progress_pct: agg.quorum_progress_pct,
+            votes_needed: agg.votes_needed,
+            deadline_estimate_utc: agg.deadline_estimate_utc,
+          });
+        }),
+      ),
       pagination: {
         next_cursor: buildNextCursor(openClaims, limit, allOpen),
         total: allOpen,
@@ -163,7 +183,12 @@ export class ClaimsService {
       throw new NotFoundException(`Claim with ID ${id} not found`);
     }
 
-    const response = this.claimViewMapper.transformClaim(claim, lastLedger);
+    const agg = await this.aggregation.aggregate(id, lastLedger);
+    const response = this.claimViewMapper.transformClaim(claim, lastLedger, {
+      quorum_progress_pct: agg.quorum_progress_pct,
+      votes_needed: agg.votes_needed,
+      deadline_estimate_utc: agg.deadline_estimate_utc,
+    });
 
     // Attach reconciliation status so the frontend can show a data-quality warning.
     const reconStatus = await this.reconciliation.getClaimReconciliationStatus(id);
@@ -211,7 +236,12 @@ export class ClaimsService {
         continue;
       }
 
-      bucket.push(this.claimViewMapper.transformClaim(claim, lastLedger));
+      const agg = await this.aggregation.aggregate(claim.id, lastLedger);
+      bucket.push(this.claimViewMapper.transformClaim(claim, lastLedger, {
+        quorum_progress_pct: agg.quorum_progress_pct,
+        votes_needed: agg.votes_needed,
+        deadline_estimate_utc: agg.deadline_estimate_utc,
+      }));
     }
 
     return results;

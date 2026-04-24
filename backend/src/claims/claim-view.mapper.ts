@@ -33,7 +33,15 @@ export class ClaimViewMapper {
     this.ipfsGateway = config.get<string>('IPFS_GATEWAY', 'https://ipfs.io');
   }
 
-  transformClaim(claim: ClaimWithVotes, lastLedger: number): ClaimDetailResponseDto {
+  transformClaim(
+    claim: ClaimWithVotes,
+    lastLedger: number,
+    aggregation?: {
+      quorum_progress_pct: number;
+      votes_needed: number;
+      deadline_estimate_utc: string;
+    },
+  ): ClaimDetailResponseDto {
     const yesVotes = claim.votes.filter((vote) => vote.vote === 'APPROVE').length;
     const noVotes = claim.votes.filter((vote) => vote.vote === 'REJECT').length;
     const totalVotes = yesVotes + noVotes;
@@ -76,12 +84,15 @@ export class ClaimViewMapper {
         current: totalVotes,
         percentage: Math.min(100, Math.round((totalVotes / requiredVotes) * 100)),
         reached: claim.isFinalized || Math.max(yesVotes, noVotes) >= requiredVotes,
+        quorum_progress_pct: aggregation?.quorum_progress_pct ?? Math.min(100, Math.round((totalVotes / requiredVotes) * 100)),
+        votes_needed: aggregation?.votes_needed ?? Math.max(0, requiredVotes - totalVotes),
       } as QuorumProgressDto,
       deadline: {
         votingDeadlineLedger,
         votingDeadlineTime,
         isOpen,
         remainingSeconds,
+        deadline_estimate_utc: aggregation?.deadline_estimate_utc ?? votingDeadlineTime.toISOString(),
       } as DeadlineDto,
       evidence: {
         gatewayUrl: sanitizedHash ? `${this.ipfsGateway}/ipfs/${sanitizedHash}` : '',
