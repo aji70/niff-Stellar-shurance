@@ -13,11 +13,62 @@ export interface BackfillJobInfo {
   batchSize: number;
 }
 
+export interface AdminStats {
+  policies: number;
+  activeCoverage: number;
+  premiums: string;
+  claimsByStatus: Record<string, number>;
+  payouts: string;
+}
+
+export interface AnalyticsPoint {
+  bucket: string;
+  policies: number;
+  claims: number;
+  premiums: string;
+  payouts: string;
+}
+
+export interface AdminAnalytics {
+  range: string;
+  series: AnalyticsPoint[];
+  solvencyRatio: number;
+}
+
+const ANALYTICS_RANGES: Record<string, number> = {
+  '24h': 24 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 60 * 1000,
+  '30d': 30 * 24 * 60 * 60 * 1000,
+  '90d': 90 * 24 * 60 * 60 * 1000,
+};
+
+const STATS_CACHE_TTL_MS = 30_000;
+
+/**
+ * Neutralise spreadsheet formula injection by prefixing cells that begin with
+ * a formula trigger character with a single quote.
+ */
+export function escapeCsvCell(value: unknown): string {
+  const raw = value === null || value === undefined ? '' : String(value);
+  const guarded = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+  if (/[",\n\r]/.test(guarded)) {
+    return `"${guarded.replace(/"/g, '""')}"`;
+  }
+  return guarded;
+}
+
+/** Serialise a single CSV row from an array of cell values. */
+export function toCsvRow(cells: unknown[]): string {
+  return cells.map(escapeCsvCell).join(',') + '\n';
+}
+
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
   private reindexQueue: Queue;
   private backfillQueue: Queue;
+  private statsCache: { value: AdminStats; expiresAt: number } | null = null;
+  private analyticsCache = new Map<string, { value: AdminAnalytics; expiresAt: number }>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -224,6 +275,261 @@ export class AdminService {
     };
   }
 
+  /**
+   * Aggregate dashboard totals. Heavy aggregates are cached briefly to avoid
+   * hammering the database on every dashboard poll.
+   */
+  async getStats(): Promise<AdminStats> {
+    const now = Date.now();
+    if (this.statsCache && this.statsCache.expiresAt > now) {
+      return this.statsCache.value;
+    }
+
+    const [policies, activeCoverage, premiumAgg, payoutAgg, claimsByStatusRaw] =
+      await Promise.all([
+        this.prisma.policy.count({ where: { deletedAt: null } }),
+        this.prisma.policy.count({ where: { deletedAt: null, status: 'ACTIVE' } }),
+        this.prisma.policy.aggregate({
+          where: { deletedAt: null },
+          _sum: { premium: true },
+        }),
+        this.prisma.claim.aggregate({
+          where: { deletedAt: null, status: 'PAID' },
+          _sum: { payoutAmount: true },
+        }),
+        this.prisma.claim.groupBy({
+          by: ['status'],
+          where: { deletedAt: null },
+          _count: { _all: true },
+        }),
+      ]);
+
+    const claimsByStatus: Record<string, number> = {};
+    for (const row of claimsByStatusRaw) {
+      claimsByStatus[row.status] = row._count._all;
+    }
+
+    const value: AdminStats = {
+      policies,
+      activeCoverage,
+      premiums: String(premiumAgg._sum.premium ?? '0'),
+      claimsByStatus,
+      payouts: String(payoutAgg._sum.payoutAmount ?? '0'),
+    };
+
+    this.statsCache = { value, expiresAt: now + STATS_CACHE_TTL_MS };
+    return value;
+  }
+
+  /**
+   * Time-series analytics over the requested range plus a solvency ratio
+   * (premiums collected relative to payouts). Cached per range.
+   */
+  async getAnalytics(range = '30d'): Promise<AdminAnalytics> {
+    const windowMs = ANALYTICS_RANGES[range] ?? ANALYTICS_RANGES['30d'];
+    const now = Date.now();
+    const cached = this.analyticsCache.get(range);
+    if (cached && cached.expiresAt > now) {
+      return cached.value;
+    }
+
+    const since = new Date(now - windowMs);
+    const bucketMs = Math.max(Math.floor(windowMs / 12), 60 * 60 * 1000);
+
+    const [policies, claims] = await Promise.all([
+      this.prisma.policy.findMany({
+        where: { deletedAt: null, createdAt: { gte: since } },
+        select: { createdAt: true, premium: true },
+      }),
+      this.prisma.claim.findMany({
+        where: { deletedAt: null, createdAt: { gte: since } },
+        select: { createdAt: true, payoutAmount: true, status: true },
+      }),
+    ]);
+
+    const buckets = new Map<string, AnalyticsPoint>();
+    const bucketKey = (d: Date) =>
+      new Date(Math.floor(d.getTime() / bucketMs) * bucketMs).toISOString();
+
+    const ensure = (key: string): AnalyticsPoint => {
+      let point = buckets.get(key);
+      if (!point) {
+        point = { bucket: key, policies: 0, claims: 0, premiums: '0', payouts: '0' };
+        buckets.set(key, point);
+      }
+      return point;
+    };
+
+    let totalPremiums = 0;
+    let totalPayouts = 0;
+
+    for (const policy of policies) {
+      const point = ensure(bucketKey(policy.createdAt));
+      point.policies += 1;
+      const premium = Number(policy.premium ?? 0);
+      point.premiums = String(Number(point.premiums) + premium);
+      totalPremiums += premium;
+    }
+
+    for (const claim of claims) {
+      const point = ensure(bucketKey(claim.createdAt));
+      point.claims += 1;
+      if (claim.status === 'PAID') {
+        const payout = Number(claim.payoutAmount ?? 0);
+        point.payouts = String(Number(point.payouts) + payout);
+        totalPayouts += payout;
+      }
+    }
+
+    const series = Array.from(buckets.values()).sort((a, b) =>
+      a.bucket.localeCompare(b.bucket),
+    );
+
+    const solvencyRatio =
+      totalPayouts > 0 ? Number((totalPremiums / totalPayouts).toFixed(4)) : totalPremiums > 0 ? Infinity : 0;
+
+    const value: AdminAnalytics = { range, series, solvencyRatio };
+    this.analyticsCache.set(range, { value, expiresAt: now + STATS_CACHE_TTL_MS });
+    return value;
+  }
+
+  /**
+   * Stream claims as CSV rows. Yields a header first, then one row per claim,
+   * so the controller can pipe without buffering the whole result set.
+   */
+  async *streamClaimsCsv(): AsyncGenerator<string> {
+    yield toCsvRow([
+      'id',
+      'policyId',
+      'status',
+      'severity',
+      'creatorAddress',
+      'payoutAmount',
+      'createdAt',
+    ]);
+
+    const batchSize = 500;
+    let cursor: number | undefined;
+
+    for (;;) {
+      const batch = await this.prisma.claim.findMany({
+        where: { deletedAt: null },
+        orderBy: { id: 'asc' },
+        take: batchSize,
+        skip: cursor ? 1 : 0,
+        cursor: cursor ? { id: cursor } : undefined,
+      });
+      if (batch.length === 0) break;
+
+      for (const claim of batch) {
+        yield toCsvRow([
+          claim.id,
+          claim.policyId,
+          claim.status,
+          claim.severity,
+          claim.creatorAddress,
+          claim.payoutAmount,
+          claim.createdAt.toISOString(),
+        ]);
+      }
+
+      cursor = batch[batch.length - 1].id;
+      if (batch.length < batchSize) break;
+    }
+  }
+
+  /** Stream policies as CSV rows (header first, then one row per policy). */
+  async *streamPoliciesCsv(): AsyncGenerator<string> {
+    yield toCsvRow([
+      'id',
+      'holderAddress',
+      'status',
+      'premium',
+      'coverageAmount',
+      'createdAt',
+    ]);
+
+    const batchSize = 500;
+    let cursor: number | undefined;
+
+    for (;;) {
+      const batch = await this.prisma.policy.findMany({
+        where: { deletedAt: null },
+        orderBy: { id: 'asc' },
+        take: batchSize,
+        skip: cursor ? 1 : 0,
+        cursor: cursor ? { id: cursor } : undefined,
+      });
+      if (batch.length === 0) break;
+
+      for (const policy of batch) {
+        yield toCsvRow([
+          policy.id,
+          policy.holderAddress,
+          policy.status,
+          policy.premium,
+          policy.coverageAmount,
+          policy.createdAt.toISOString(),
+        ]);
+      }
+
+      cursor = batch[batch.length - 1].id;
+      if (batch.length < batchSize) break;
+    }
+  }
+
+  /** List audit-log entries, newest first, with keyset pagination. */
+  async getAuditLog(options: { after?: string; limit?: number } = {}) {
+    const DEFAULT_LIMIT = 50;
+    const MAX_LIMIT = 200;
+    const limit = Math.min(options.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
+
+    let skipId: number | undefined;
+    if (options.after) {
+      try {
+        const decoded = Buffer.from(options.after, 'base64').toString('utf-8');
+        skipId = parseInt(decoded, 10);
+        if (Number.isNaN(skipId)) skipId = undefined;
+      } catch {
+        skipId = undefined;
+      }
+    }
+
+    const entries = await this.prisma.adminAuditLog.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+      skip: skipId ? 1 : 0,
+      cursor: skipId ? { id: skipId } : undefined,
+    });
+
+    const hasNextPage = entries.length > limit;
+    const data = entries.slice(0, limit);
+    const nextCursor = hasNextPage
+      ? Buffer.from(String(data[data.length - 1]?.id ?? '')).toString('base64')
+      : null;
+
+    return { data, pagination: { nextCursor, hasNextPage } };
+  }
+
+  /** Persist an admin action to the audit log. */
+  async recordAudit(entry: {
+    actor: string;
+    action: string;
+    target?: string;
+    requestId?: string;
+    outcome: string;
+  }) {
+    return this.prisma.adminAuditLog.create({
+      data: {
+        actor: entry.actor,
+        action: entry.action,
+        target: entry.target ?? null,
+        requestId: entry.requestId ?? null,
+        outcome: entry.outcome,
+      },
+    });
+  }
+
   async setFeatureFlag(key: string, enabled: boolean, description: string | undefined, actor: string) {
     this.featureFlagsService.assertAllowlisted(key);
     const result = await this.prisma.featureFlag.upsert({
@@ -257,8 +563,7 @@ export class AdminService {
     for (const { key } of updates) {
       this.featureFlagsService.assertAllowlisted(key);
     }
-
-    const results = await this.prisma.$transaction(
+    return this.prisma.$transaction(
       updates.map(({ key, enabled }) =>
         this.prisma.featureFlag.upsert({
           where: { key },
@@ -267,92 +572,5 @@ export class AdminService {
         }),
       ),
     );
-
-    await this.featureFlagsService.refreshFlags();
-    return results.map((r) => ({ key: r.key, enabled: r.enabled }));
-  }
-
-  async exportPoliciesCSV(options: {
-    status?: string;
-    holderAddress?: string;
-    policyType?: string;
-    dateFrom?: string;
-    dateTo?: string;
-    pageSize?: number;
-  }) {
-    const DEFAULT_PAGE_SIZE = 100;
-    const pageSize = Math.min(options.pageSize ?? DEFAULT_PAGE_SIZE, 1000);
-
-    // Build where conditions
-    const where: Prisma.PolicyWhereInput = {
-      deletedAt: null, // Exclude soft-deleted
-    };
-
-    // Status filter maps to isActive (active=true, inactive=false)
-    if (options.status) {
-      where.isActive = options.status.toLowerCase() === 'active';
-    }
-
-    if (options.holderAddress) {
-      where.holderAddress = options.holderAddress;
-    }
-
-    if (options.policyType) {
-      where.policyType = options.policyType;
-    }
-
-    const dateConditions: Prisma.DateTimeFilter = {};
-    if (options.dateFrom) {
-      dateConditions.gte = new Date(options.dateFrom);
-    }
-    if (options.dateTo) {
-      dateConditions.lte = new Date(options.dateTo);
-    }
-    if (Object.keys(dateConditions).length > 0) {
-      where.createdAt = dateConditions;
-    }
-
-    // CSV headers
-    const headers = ['id', 'holderAddress', 'policyType', 'isActive', 'createdAt', 'updatedAt'];
-    const rows: string[] = [headers.map(h => `"${h}"`).join(',')];
-
-    // Stream rows using cursor pagination
-    let cursor: string | undefined;
-    let hasMore = true;
-
-    while (hasMore) {
-      const policies = await this.prisma.policy.findMany({
-        where,
-        orderBy: { id: 'asc' },
-        take: pageSize + 1,
-        skip: cursor ? 1 : 0,
-        cursor: cursor ? { id: cursor } : undefined,
-      });
-
-      if (policies.length === 0) {
-        hasMore = false;
-        break;
-      }
-
-      hasMore = policies.length > pageSize;
-      const batch = policies.slice(0, pageSize);
-
-      for (const policy of batch) {
-        rows.push([
-          `"${policy.id}"`,
-          `"${policy.holderAddress}"`,
-          `"${policy.policyType}"`,
-          `"${policy.isActive}"`,
-          `"${policy.createdAt.toISOString()}"`,
-          `"${policy.updatedAt.toISOString()}"`,
-        ].join(','));
-      }
-
-      if (hasMore) {
-        cursor = batch[batch.length - 1].id;
-      }
-    }
-
-    return rows.join('\n');
   }
 }
