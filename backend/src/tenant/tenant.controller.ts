@@ -1,75 +1,51 @@
-import { Controller, Get, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import { Request } from 'express';
+import { AdminGuard } from '../auth/admin.guard';
+import { TenantService } from './tenant.service';
+import { CreateTenantDto } from './dto/create-tenant.dto';
 import { TenantContextService } from './tenant-context.service';
-import { TenantConfigService, TenantConfig } from './tenant-config.service';
-import { TenantOnboardingService, OnboardingChecklist } from './tenant-onboarding.service';
 
-@ApiTags('Tenant')
-@Controller('tenant')
+@Controller('v1/tenant')
 export class TenantController {
   constructor(
-    private readonly tenantContextService: TenantContextService,
-    private readonly tenantConfigService: TenantConfigService,
-    private readonly tenantOnboardingService: TenantOnboardingService,
+    private readonly tenantService: TenantService,
+    private readonly tenantContext: TenantContextService,
   ) {}
 
+  /**
+   * Public branding/config endpoint. Resolves the tenant from the request
+   * (host or X-Tenant-Id) via the tenant middleware and returns only the
+   * public branding information for that tenant. Falls back to the default
+   * tenant explicitly when no tenant is resolved.
+   */
   @Get('config')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Get tenant configuration (contract IDs, feature flags)' })
-  @ApiResponse({
-    status: 200,
-    description: 'Tenant configuration including contract IDs, feature flags, and network.',
-    schema: {
-      example: {
-        tenantId: 'acme',
-        contractIds: {
-          niffyinsure: 'CCXZ...',
-          defaultToken: 'CBDR...',
-        },
-        featureFlags: {
-          claims_enabled: true,
-          policy_creation_enabled: true,
-        },
-        network: 'testnet',
-      },
-    },
-  })
-  async getConfig(): Promise<TenantConfig> {
-    const tenantId = this.tenantContextService.tenantId;
-    return this.tenantConfigService.getConfig(tenantId);
+  async getConfig(@Req() req: Request) {
+    const tenantId =
+      this.tenantContext.getTenantId() ??
+      (req as Request & { tenantId?: string }).tenantId ??
+      this.tenantService.getDefaultTenantId();
+
+    return this.tenantService.getPublicConfig(tenantId);
   }
 
-  @Get('onboarding-checklist')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Get tenant onboarding setup completeness' })
-  @ApiResponse({
-    status: 200,
-    description: 'Onboarding checklist showing which setup steps are complete.',
-    schema: {
-      example: {
-        tenantId: 'acme',
-        completedSteps: 3,
-        totalSteps: 4,
-        isComplete: false,
-        steps: [
-          {
-            id: 'contract_niffyinsure',
-            name: 'Niffo Insurance Contract',
-            description: 'Niffo insurance contract ID configured',
-            completed: true,
-          },
-          {
-            id: 'contract_default_token',
-            name: 'Default Token Contract',
-            description: 'Default token contract ID configured',
-            completed: false,
-          },
-        ],
-      },
-    },
-  })
-  async getOnboardingChecklist(): Promise<OnboardingChecklist> {
-    const tenantId = this.tenantContextService.tenantId;
-    return this.tenantOnboardingService.getOnboardingChecklist(tenantId);
+  /**
+   * Admin onboarding: creates a tenant together with its config
+   * (branding, allowed assets, feature flags) and writes a
+   * TenantConfigAuditLog entry for the creation.
+   */
+  @Post('onboard')
+  @UseGuards(AdminGuard)
+  async onboard(@Body() dto: CreateTenantDto, @Req() req: Request) {
+    const actorId =
+      (req as Request & { user?: { id?: string } }).user?.id ?? 'system';
+
+    return this.tenantService.onboardTenant(dto, actorId);
   }
 }

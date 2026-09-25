@@ -20,12 +20,17 @@ import { TenantContextService } from './tenant-context.service';
  *   - lowercase alphanumeric + hyphens only
  *   - must not start or end with a hyphen
  * Invalid values are silently ignored (tenantId stays null).
+ *
+ * When no tenant can be resolved, the request is explicitly bound to the
+ * configured default tenant (DEFAULT_TENANT_ID) so that downstream data
+ * access is always scoped to a single tenant — never "all tenants".
  */
 @Injectable()
 export class TenantMiddleware implements NestMiddleware {
   private readonly logger = new Logger(TenantMiddleware.name);
   private readonly enabled: boolean;
   private readonly baseDomain: string;
+  private readonly defaultTenantId: string;
 
   constructor(
     private readonly tenantCtx: TenantContextService,
@@ -33,20 +38,25 @@ export class TenantMiddleware implements NestMiddleware {
   ) {
     this.enabled = this.config.get<boolean>('TENANT_RESOLUTION_ENABLED', false);
     this.baseDomain = this.config.get<string>('TENANT_BASE_DOMAIN', 'niffyinsur.com');
+    this.defaultTenantId = this.config.get<string>('DEFAULT_TENANT_ID', 'default');
   }
 
   use(req: Request & { tenantId?: string | null }, _res: Response, next: NextFunction): void {
     if (!this.enabled) {
-      req.tenantId = null;
+      req.tenantId = this.defaultTenantId;
+      this.tenantCtx.tenantId = this.defaultTenantId;
       return next();
     }
 
-    const tenantId = this.resolveFromHeader(req) ?? this.resolveFromSubdomain(req);
-    req.tenantId = tenantId ?? null;
+    const resolved = this.resolveFromHeader(req) ?? this.resolveFromSubdomain(req);
+    const tenantId = resolved ?? this.defaultTenantId;
+    req.tenantId = tenantId;
 
-    if (tenantId) {
-      this.tenantCtx.tenantId = tenantId;
+    this.tenantCtx.tenantId = tenantId;
+    if (resolved) {
       this.logger.debug(`Resolved tenant: ${tenantId}`);
+    } else {
+      this.logger.debug(`No tenant resolved, using default tenant: ${tenantId}`);
     }
 
     next();
