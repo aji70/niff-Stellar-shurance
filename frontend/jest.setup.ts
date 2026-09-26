@@ -69,3 +69,31 @@ if (typeof document !== 'undefined' && typeof document.execCommand !== 'function
     configurable: true,
   });
 }
+
+// MSW server lifecycle for unit tests.
+// Handlers are generated from the OpenAPI types in `frontend/tests/msw/handlers.ts`.
+// The server is started once per test file and reset between tests so that
+// per-test handler overrides (`server.use(...)`) do not leak across cases.
+if (typeof globalThis.fetch !== 'undefined') {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { server } = require('./tests/msw/server');
+
+    beforeAll(() => {
+      server.listen({ onUnhandledRequest: 'error' });
+    });
+
+    afterEach(() => {
+      server.resetHandlers();
+    });
+
+    afterAll(() => {
+      server.close();
+    });
+  } catch (error) {
+    // The MSW server is optional for suites that do not exercise the network.
+    // Surface the reason so misconfiguration is visible instead of silent.
+    // eslint-disable-next-line no-console
+    console.warn('[jest.setup] MSW server not initialised:', error);
+  }
+}
